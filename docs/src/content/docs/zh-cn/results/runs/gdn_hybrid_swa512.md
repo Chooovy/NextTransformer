@@ -1,5 +1,5 @@
 ---
-title: Hybrid GDN + SWA-512
+title: Hybrid GDN + SWA
 description: H03-SWA512 的配置、完整正式结果、恢复记录与执行证据。
 ---
 

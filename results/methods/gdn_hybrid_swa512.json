@@ -1,6 +1,6 @@
 {
  "id": "gdn_hybrid_swa512",
- "name": "Hybrid GDN + SWA-512",
+ "name": "Hybrid GDN + SWA",
  "family": "hybrid",
  "tagline": "Alternating gated delta blocks and 512-key sliding-window attention at 2K context.",
  "description": "H03-SWA512 uses 24 independent layers alternating 12 GDN and 12 sliding-window attention blocks. Each attention query sees up to 512 keys, including itself. Width is 1536, with 12 heads of dimension 128, FFN width 6016, a 32768-token vocabulary, and a 2048-token training context. This is a completed configuration of the frozen gdn_hybrid_swa implementation.",
