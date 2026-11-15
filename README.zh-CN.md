@@ -125,7 +125,7 @@ accelerate launch --config_file launch/accelerate.yaml \
 | <img src="https://img.shields.io/badge/Looped-8B5CF6?style=flat-square" alt="循环"> | UT-ACT · Fixed Recursive · Huginn · Ouro · DeepLoop · MoR · LoopFormer · Circle Loop |
 | <img src="https://img.shields.io/badge/Sparse-E5607E?style=flat-square" alt="稀疏"> | DSA · QSA · NSA · SeerAttention-style · MoBA |
 | <img src="https://img.shields.io/badge/Linear-3F7FD9?style=flat-square" alt="线性"> | DeltaNet · GSA + QK-norm · GLA · KDA · RetNet · ELU-Norm · GDN |
-| <img src="https://img.shields.io/badge/Hybrid-F07856?style=flat-square" alt="混合"> | GDN–MHA · GDN–SWA · Hybrid GDN + SWA-512 · DeltaNet–MHA · KDA–MLA-NoPE · GDN–QSA\* · MoBA–MHA |
+| <img src="https://img.shields.io/badge/Hybrid-F07856?style=flat-square" alt="混合"> | GDN–MHA 3:1 · GDN–MHA 1:1 · GDN–SWA · DeltaNet–MHA · KDA–MLA-NoPE · GDN–QSA\* · MoBA–MHA |
 | <img src="https://img.shields.io/badge/Others-D99A2B?style=flat-square" alt="其他"> | SSSL · MQA · GQA · MLA-QK · MLA-NoPE-QK · Gated Attention · elementwise · Gated Attention · headwise |
 <!-- /generated:model-zoo -->
 
