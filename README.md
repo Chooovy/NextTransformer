@@ -48,7 +48,7 @@ result is an audited, file-backed record, and AI agents can research new archite
 
 <a href="https://interactive-active-ai.github.io/NextTransformer/docs/protocol/overview/"><img src=".github/assets/readme/card-protocol-en.webp" alt="A fair, explicit protocol: same data, tokens, optimizer, schedule and evaluation for every model; training compute matched to within 1% and audited over the whole run." width="100%"></a>
 
-**[2K scaling study](https://interactive-active-ai.github.io/NextTransformer/#scaling)** · Compare size and token allocations across four families at one T3 training budget.
+<a href="https://interactive-active-ai.github.io/NextTransformer/#scaling"><img src=".github/assets/readme/card-scale-en.webp" alt="2K scaling study at fixed compute: Dense, MoE, KDA–DSA and Fixed Recursive each sweep four depths, 16 T3 configurations at 10²⁰ training FLOPs per run with a 2,048-token context. T3 comes first, then T4, T5 and a held-out C200 test." width="100%"></a>
 
 <a href="https://interactive-active-ai.github.io/NextTransformer/docs/arena/task/"><img src=".github/assets/readme/card-agent-en.webp" alt="Agent-native research: hand the arena task to your agent; the full version, Arena v2, ships by November 14, 2026." width="100%"></a>
 

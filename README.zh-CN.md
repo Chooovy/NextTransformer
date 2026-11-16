@@ -47,7 +47,7 @@ AI agent 也可以在完全相同的规则下研究新架构。
 
 <a href="https://interactive-active-ai.github.io/NextTransformer/docs/zh-cn/protocol/overview/"><img src=".github/assets/readme/card-protocol-zh.webp" alt="公平、明确的协议：每个模型使用相同的数据、token、优化器、调度和评测；训练算力对齐到 1% 以内，并对整个运行做审计。" width="100%"></a>
 
-**[2K Scaling 研究](https://interactive-active-ai.github.io/NextTransformer/#scaling)** · 四个架构家族在 T3 共享训练预算，比较模型大小与训练量。
+<a href="https://interactive-active-ai.github.io/NextTransformer/#scaling"><img src=".github/assets/readme/card-scale-zh.webp" alt="固定算力下的 2K Scaling 研究：Dense、MoE、KDA–DSA 和 Fixed Recursive 四个架构家族各扫四个深度，共 16 个 T3 配置，每次训练 10²⁰ FLOPs、2,048 上下文。先做 T3，再到 T4、T5 和留出的 C200 盲测。" width="100%"></a>
 
 <a href="https://interactive-active-ai.github.io/NextTransformer/docs/zh-cn/arena/task/"><img src=".github/assets/readme/card-agent-zh.webp" alt="Agent 原生研究：把竞技场任务交给你的 agent；完整版本 Arena v2 将于 2026 年 11 月 14 日前上线。" width="100%"></a>
 
