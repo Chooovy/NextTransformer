@@ -1,6 +1,6 @@
 # XSA, independent REL, and BOS-sensitive evaluation
 
-These are completed fixed-protocol runs and post-run diagnostic evidence. Original scores are exported alongside model cards and run notes; acceptance of the 64-rank layout remains a maintainer review item. Both methods completed 46,875 updates, 49.152B input tokens, 189 validation events, and six complete CORE-22 events with seed 42 and context 2048. Training used the shared eight-stream data order on 64 ranks (microbatch 8, accumulation 1). A private launcher/audit allowlist extension admitted that layout; upstream registration remains pending. No shared training/evaluation code or local launch infrastructure is included here.
+These are completed fixed-protocol runs and post-run diagnostic evidence. Original scores are exported alongside model cards and run notes. Both methods completed 46,875 updates, 49.152B input tokens, 189 validation events, and six complete CORE-22 events with seed 42 and context 2048. Training used the shared eight-stream data order on 64 ranks (microbatch 8, accumulation 1), a layout since registered in the run audit by #57. No shared training/evaluation code or local launch infrastructure is included here.
 
 ## Original evaluation
 
@@ -49,6 +49,6 @@ PYTHONPATH=. NANOCHAT_DTYPE=bfloat16 torchrun --standalone --nproc-per-node=8 \
   --tasks squad --all
 ```
 
-For bounded matched strata and space/removal controls, omit `--all` and add `--controls`. This diagnostic does not modify the trainer, shared evaluator, or recorded run outputs. Model cards, original result exports and run notes accompany this evidence. The accompanying proposal and PR request upstream acceptance of the 64-rank layout. Checkpoint hashes identify the locally retained checkpoints; weight hosting is separate from the original result records.
+For bounded matched strata and space/removal controls, omit `--all` and add `--controls`. This diagnostic does not modify the trainer, shared evaluator, or recorded run outputs. Model cards, original result exports and run notes accompany this evidence. Checkpoint hashes identify the locally retained checkpoints; weight hosting is separate from the original result records.
 
 The published script was checked on the first eight SQuAD examples with all applicable controls. All 24 records, including correctness and answer-token NLL, exactly match the retained diagnostic records (`reproduction-check.json`). This bounded check verifies reproduction, not a new score estimate.

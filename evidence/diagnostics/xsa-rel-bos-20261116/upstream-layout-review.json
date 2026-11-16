@@ -1,4 +1,5 @@
 {
+  "note": "Recorded before the 64-rank layout was registered. #57 added 64 to the run audit's execution-layout allowlist, so these findings no longer reproduce and the unchanged audit now accepts both runs. The findings are kept as the state at submission time.",
   "xsa": {
     "upstream_audit_ok": false,
     "problems": [

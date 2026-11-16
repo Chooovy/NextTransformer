@@ -11,7 +11,7 @@
   "Projection uses the effective attention value, with FP32 arithmetic for half-precision inputs",
   "No added parameters; shared RoPE, QK normalization, value embeddings and optimizer"
  ],
- "limitations": "Single seed 42; fixed-compute mechanism adaptation, not the source model's complete training recipe. CORE left truncation removes BOS and affects SQuAD interpretation; only original protocol scores are published. The 64-rank execution layout passed a local audit extension and requires upstream acceptance.",
+ "limitations": "Single seed 42; fixed-compute mechanism adaptation, not the source model's complete training recipe. CORE left truncation removes BOS and affects SQuAD interpretation; only original protocol scores are published. The 64-rank execution layout is registered in the run audit.",
  "diagram": "custom",
  "architecture": {
   "kind": "custom",

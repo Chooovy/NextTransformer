@@ -11,7 +11,7 @@ description: 完整 49.152B token 运行、原协议分数及训练后的 BOS �
 
 训练使用固定数据、tokenizer、八条数据流顺序、seed 42、2048 token 上下文、Muon + AdamW 调度、49.152B 输入 token 和每次更新 1,048,576 token。189 次验证与六次完整 CORE-22 评测均已完成。64 ranks、microbatch 8、累积 1 的布局先通过训练数据上的完整更新及保存/恢复预检，正式训练单段完成，无训练重试。校准与预检未使用留出集分数选择配置。
 
-**布局待审核：**随附审计由本地增加 64-rank 白名单的启动器/审计器产生。当前上游登记了 8、16、32 ranks，原版审计会报告 64 ranks 尚未登记。结果合入需维护者接受这一执行布局；此记录不声称已经获得批准。机器相关启动脚本与私有白名单补丁不属于本次方法实现。
+**执行布局：**本次运行使用 64 ranks，已由 [#57](https://github.com/Interactive-Active-AI/NextTransformer/pull/57) 登记进运行审计，原版审计命令即可接受，随附审计没有任何问题。`data_layout` 对任意 8 的倍数都驱动同样的八条 `BestFitStream`，且 64 x 8 x 1 x 2048 = 1,048,576 与协议的全局批一致，因此每次更新所见数据与 8、16、32 ranks 的运行完全相同。机器相关启动脚本不属于本次方法实现。
 
 训练时冻结的源码提交为 `5310e8971a9519762f2eca77564561a2fee11494`。插件源码及科学计算指纹与提交的实现一致；导出的记录省略了私有源码目录。原始训练 provenance 与分数文件均未改写。
 
@@ -23,4 +23,4 @@ description: 完整 49.152B token 运行、原协议分数及训练后的 BOS �
 
 同样恢复 BOS 的 Dense 诊断为 53.6329%，该次诊断原始分数为 50.0378%，比已发表的 50.0000% 多四个正确样本。因此原始 CORE 排名不能单独视为架构质量结论。BOS 也无法解释所有任务：REL 在有限的截断 BoolQ 对照中恢复 BOS 后下降，Language ID 证据不确定，LSAT-AR 没有截断。这里没有声称已定位注意力 sink 回路或 kernel 缺陷。
 
-[完整计数与对照](https://github.com/Interactive-Active-AI/NextTransformer/tree/main/evidence/diagnostics/xsa-rel-bos-20261116) · [运行记录](https://github.com/Interactive-Active-AI/NextTransformer/blob/main/results/runs/inkling_rel.json) · [本地布局累计审计](https://github.com/Interactive-Active-AI/NextTransformer/blob/main/evidence/audits/inkling_rel.json)
+[完整计数与对照](https://github.com/Interactive-Active-AI/NextTransformer/tree/main/evidence/diagnostics/xsa-rel-bos-20261116) · [运行记录](https://github.com/Interactive-Active-AI/NextTransformer/blob/main/results/runs/inkling_rel.json) · [累计审计](https://github.com/Interactive-Active-AI/NextTransformer/blob/main/evidence/audits/inkling_rel.json)

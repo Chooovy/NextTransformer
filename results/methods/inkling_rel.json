@@ -11,7 +11,7 @@
   "Covers all backward distances 0–2047, including self; no RoPE or clipped distance region",
   "Original Triton forward/backward, FP32 softmax accumulators, full-sequence MHA"
  ],
- "limitations": "Single seed 42; fixed-compute mechanism adaptation, not the source model's complete training recipe. CORE left truncation removes BOS and affects SQuAD interpretation; only original protocol scores are published. The 64-rank execution layout passed a local audit extension and requires upstream acceptance. REL supports full-sequence training/evaluation, not incremental KV-cache decoding.",
+ "limitations": "Single seed 42; fixed-compute mechanism adaptation, not the source model's complete training recipe. CORE left truncation removes BOS and affects SQuAD interpretation; only original protocol scores are published. The 64-rank execution layout is registered in the run audit. REL supports full-sequence training/evaluation, not incremental KV-cache decoding.",
  "diagram": "custom",
  "architecture": {
   "kind": "custom",

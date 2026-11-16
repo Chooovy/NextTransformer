@@ -1131,5 +1131,5 @@
   "accounting": "reference-aten-math-v2",
   "source": "Cumulative audit · evidence/audits/xsa.json"
  },
- "comparisonNote": "Original fixed-protocol scores. BOS loss under CORE left truncation depresses SQuAD; diagnostic restored scores are not substituted. Executed on a local 64-rank layout extension; upstream layout acceptance pending."
+ "comparisonNote": "Original fixed-protocol scores. BOS loss under CORE left truncation depresses SQuAD; diagnostic restored scores are not substituted. Executed on a 64-rank layout, registered in the run audit by #57."
 }

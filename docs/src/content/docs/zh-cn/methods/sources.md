@@ -129,4 +129,4 @@ KDA、RetNet、GDN 的传递状态和累加使用 FP32，操作数与分块边�
 
 **Inkling REL** 独立替换 RoPE，使用查询相关的相对位置 logits；每头查询投影维度为 16，层内跨头共享距离表，覆盖 0–2047。实现保留共享 Dense 骨架的 QK 归一化、1.2 gain、1/sqrt(head_dim) 缩放、value embedding 与优化器，未引入源模型的 MoE、短卷积、GQA 或层布局。CPU 可微参考与原创 Triton 前向/反向计算同一函数。[插件说明](https://github.com/Interactive-Active-AI/NextTransformer/blob/main/nexttransformer/methods/inkling_rel/README.md) 列出固定的上游配置与源码版本及数值边界。
 
-两个完成的 49.152B-token 运行保留原协议分数。训练后的 BOS 诊断用于解释 CORE 左截断对 SQuAD 的影响，不替换榜单结果。64-rank 布局通过了本地扩展审计，仍需上游接受，详见各自的 run notes。
+两个完成的 49.152B-token 运行保留原协议分数。训练后的 BOS 诊断用于解释 CORE 左截断对 SQuAD 的影响，不替换榜单结果。64-rank 布局已登记进运行审计（#57），详见各自的 run notes。
