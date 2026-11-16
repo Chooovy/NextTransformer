@@ -62,7 +62,7 @@ your browser.
 ## Results
 
 <!-- generated:leaderboard -->
-<a href="https://interactive-active-ai.github.io/NextTransformer/#leaderboard"><img src=".github/assets/readme/results-en.svg" alt="CORE at update 46,875 for all 40 runs, against the Dense Baseline" width="100%"></a>
+<a href="https://interactive-active-ai.github.io/NextTransformer/#leaderboard"><img src=".github/assets/readme/results-en.svg" alt="CORE at update 46,875 for all 41 runs, against the Dense Baseline" width="100%"></a>
 
 [Full leaderboard](https://interactive-active-ai.github.io/NextTransformer/docs/results/leaderboard/) · [Training replay](https://interactive-active-ai.github.io/NextTransformer/#leaderboard)
 <!-- /generated:leaderboard -->
@@ -128,7 +128,7 @@ Contributor-hosted weights: [AttnRes-Canon (49B comparison)](https://huggingface
 | <img src="https://img.shields.io/badge/Looped-8B5CF6?style=flat-square" alt="Looped"> | UT-ACT · Fixed Recursive · Huginn · Ouro · DeepLoop · MoR · LoopFormer · Circle Loop |
 | <img src="https://img.shields.io/badge/Sparse-E5607E?style=flat-square" alt="Sparse"> | DSA · QSA · NSA · SeerAttention-style · MoBA |
 | <img src="https://img.shields.io/badge/Linear-3F7FD9?style=flat-square" alt="Linear"> | DeltaNet · GSA + QK-norm · GLA · KDA · RetNet · ELU-Norm · GDN |
-| <img src="https://img.shields.io/badge/Hybrid-F07856?style=flat-square" alt="Hybrid"> | GDN–MHA 3:1 · GDN–MHA 1:1 · GDN–SWA · DeltaNet–MHA · KDA–MLA-NoPE · GDN–QSA\* · MoBA–MHA |
+| <img src="https://img.shields.io/badge/Hybrid-F07856?style=flat-square" alt="Hybrid"> | GDN–MHA 3:1 · GDN–MHA 1:1 · GDN–SWA · DeltaNet–MHA · KDA–MLA-NoPE · GDN–QSA · MoBA–MHA |
 | <img src="https://img.shields.io/badge/Others-D99A2B?style=flat-square" alt="Others"> | SSSL · MQA · GQA · MLA-QK · MLA-NoPE-QK · Gated Attention · elementwise · Gated Attention · headwise |
 <!-- /generated:model-zoo -->
 
@@ -205,7 +205,7 @@ Community projects that extend NextTransformer.
 
 - **By November 14, 2026:** Arena v2 and agent-native research.
 - **2K scaling:** start with the [T3 size sweep](https://interactive-active-ai.github.io/NextTransformer/#scaling), refine the fits, check preregistered forecasts, then hold out C200 for the final test.
-- **Upcoming results:** GDN + QSA and MoBA + MHA hybrids.
+- **Hybrid GDN + QSA:** completed formal results, cumulative audit and [run notes](https://interactive-active-ai.github.io/NextTransformer/docs/results/runs/qsa_hybrid/).
 - **Planned:** checkpoints and the tokenizer on the Hugging Face Hub.
 
 More on the [roadmap](https://interactive-active-ai.github.io/NextTransformer/docs/roadmap/).
