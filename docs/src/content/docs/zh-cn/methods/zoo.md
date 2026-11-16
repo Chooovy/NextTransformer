@@ -3,7 +3,7 @@ title: 模型库
 description: 按模型族浏览已注册的架构、论文和结果状态。
 ---
 
-当前共有 41 张模型卡。各方法在同一骨干上校准至相同训练算力。在[观测站](https://interactive-active-ai.github.io/NextTransformer/#atlas)选择模型可查看结构图、曲线和模型卡。“已注册”表示已有配置与模型卡，尚无公开运行结果。
+当前共有 43 张模型卡。各方法在同一骨干上校准至相同训练算力。在[观测站](https://interactive-active-ai.github.io/NextTransformer/#atlas)选择模型可查看结构图、曲线和模型卡。“已注册”表示已有配置与模型卡，尚无公开运行结果。
 
 | 模型族 | 方法 | 论文 | 结果 |
 |---|---|---|---|
@@ -48,5 +48,7 @@ description: 按模型族浏览已注册的架构、论文和结果状态。
 | 其他 | MLA-NoPE + QK-norm (`mla_nope_qknorm`) | [DeepSeek-V2: A Strong, Economical, and Efficient Mixture-of-Experts Language Model](https://arxiv.org/abs/2405.04434) | 已发布 |
 | 其他 | Gated Attention · elementwise (`gated_attention`) | [Gated Attention for Large Language Models: Non-linearity, Sparsity, and Attention-Sink-Free](https://arxiv.org/abs/2505.06708) | 已发布 |
 | 其他 | Gated Attention · headwise (`gated_attention_headwise`) | [Gated Attention for Large Language Models: Non-linearity, Sparsity, and Attention-Sink-Free](https://arxiv.org/abs/2505.06708) | 已发布 |
+| 其他 | XSA · Exclusive Self Attention (`xsa`) | [Exclusive Self Attention](https://arxiv.org/abs/2603.09078v1) | 已发布 |
+| 其他 | Inkling REL (`inkling_rel`) | [Inkling: content-dependent relative position logits](https://huggingface.co/thinkingmachines/Inkling) | 已发布 |
 
 训练配置见[模型配置](../configurations/)。新增架构请参见[编写插件](../../guides/plugins/)。
