@@ -1,0 +1,18 @@
+{
+  "xsa": {
+    "upstream_audit_ok": false,
+    "problems": [
+      "provenance.json: unregistered world size 64"
+    ],
+    "all_other_checks_pass": true,
+    "local_audit": "evidence/audits/xsa.json"
+  },
+  "inkling_rel": {
+    "upstream_audit_ok": false,
+    "problems": [
+      "provenance.json: unregistered world size 64"
+    ],
+    "all_other_checks_pass": true,
+    "local_audit": "evidence/audits/inkling_rel.json"
+  }
+}
