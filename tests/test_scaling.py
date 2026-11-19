@@ -52,6 +52,8 @@ def test_t3_dense_cells_match_their_manifest_cell(capsys, cell_id, name, paramet
                                                                    cell['heads'], cell['ffnWidth'])
     assert (tc.steps, tc.total_tokens) == (cell['estimatedUpdates'], cell['estimatedTokens'])
     assert mc.width//mc.heads == cell['headDim'] and mc.window_pattern == 'L' and not mc.value_embeddings
+    published = json.loads((ROOT/f'results/scaling/runs/{cell_id}.json').read_text())
+    assert config_hash(mc, tc) == published['configSha256']
     with torch.device('meta'): model = NativeExperiment(mc)
     assert sum(p.numel() for p in model.parameters()) == parameters
     d, layers, t = mc.width, mc.dense_layers, mc.sequence_len
