@@ -32,6 +32,13 @@ not reproduce the aggregate, an unmatched cumulative audit, any research-mode se
 different protocol. Add `--note "..."` when the run needs a provenance note (for example, trained from a frozen source
 revision).
 
+Declare the CORE truncation setting and exact token limit in the result announcement and pull request. Use
+`none` with no limit for full prompts, or `left` with the number supplied to `--core-max-tokens N`.
+The exporter reads the measurements from all six CORE events. It writes a `coreContext` object containing
+`trainingTokens`, `truncation`, `maxTokens` (null for full prompts), and `maxEvaluatedTokens`. For logs from the
+original evaluator, pass `--legacy-core-2048` only after verifying the original 2,048-token left crop.
+The leaderboard groups methods by the longest input actually scored.
+
 ## 3. Write run notes
 
 Add `docs/src/content/docs/results/runs/<method>.md`: what was run, any resumes, failed attempts, and the limitations a

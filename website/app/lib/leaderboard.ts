@@ -46,3 +46,15 @@ export function leaderboardEntries(runs:Run[],metric:RankingMetric,mode:RankingM
   return {...entry,rank};
  });
 }
+
+/** Group runs that have a CORE measurement by the longest input actually evaluated. */
+export function coreLengthGroups(runs: Run[], name: (run: Run) => string) {
+ const within = new Set<string>(), beyond = new Set<string>();
+ for (const run of runs) {
+  const context = run.coreContext;
+  if (!context || !run.core.length) continue;
+  const group = context.maxEvaluatedTokens > context.trainingTokens ? beyond : within;
+  group.add(name(run));
+ }
+ return {within: [...within].sort(), beyond: [...beyond].sort()};
+}

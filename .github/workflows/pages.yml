@@ -7,6 +7,7 @@ on:
       - "website/**"
       - "docs/**"
       - "results/**"
+      - "nexttransformer/evaluation/core-lengths.json"
       - "configs/scaling/t3.json"
       - "nexttransformer/scaling/reference_blocks.py"
       - ".github/workflows/pages.yml"

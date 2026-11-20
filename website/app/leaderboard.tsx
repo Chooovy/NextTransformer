@@ -4,11 +4,12 @@ import {TONES} from './lib/palette';
 import type {CSSProperties} from 'react';
 import {ArrowDown,ArrowRight,ArrowUp,Pause,Play,RotateCcw} from 'lucide-react';
 import {chartName} from './learning-chart';
-import {FINAL_STEP,leaderboardEntries,rankingCheckpoint} from './lib/leaderboard';
+import {FINAL_STEP,coreLengthGroups,leaderboardEntries,rankingCheckpoint} from './lib/leaderboard';
 import type {RankingMetric,RankingMode} from './lib/leaderboard';
 import {LEVELS,coreOnly,originOf,provenance} from './lib/arena';
 import type {Origin} from './lib/arena';
 import {arenaEntries} from './lib/results';
+import coreLengths from '../../nexttransformer/evaluation/core-lengths.json';
 import type {Method,Run} from './lib/types';
 import './leaderboard.css';
 import {ComputeValue} from './training-compute';
@@ -52,6 +53,8 @@ export default function Leaderboard({runs,methods,baseline,cursor,playing,onRepl
  },[]);
  const dense=(kind:RankingMetric)=>baseline?.[kind].find(p=>p.step===(mode==='final'?FINAL_STEP:checkpoint))?.value;
  const label=(run:Run)=>chartName(methods.find(m=>m.id===run.methodId))||run.methodId;
+ const lengthGroups=coreLengthGroups(entries.filter(e=>e.core!==undefined).map(e=>e.run),label);
+ const longTasks=Object.keys(coreLengths.overTrainingContext);
  const primaryLabel=metric==='core'?'CORE':'validation BPB';
  function replay(){setMode('replay');onReplay();}
  function renderScore(value:number|undefined,latest:Run['core'][number]|undefined,kind:RankingMetric,run:Run){
@@ -84,7 +87,13 @@ export default function Leaderboard({runs,methods,baseline,cursor,playing,onRepl
     })}
    </div>
    {!entries.length&&<p className="leaderboard-empty">{origin==='agent'?'No auto-research entries yet. Arena entries appear here after review.':'No measured experiments yet. New results appear here after review.'}</p>}
-   <div className="leaderboard-caption"><span>{mode==='final'?<>Final rankings use measured results at step {number(FINAL_STEP)}. Final val BPB is the last periodic validation checkpoint.</>:<>Replay rankings use exactly the same evaluation step for every ranked model. Rows move as measured checkpoints arrive.</>}</span><span>Training compute is estimated per input token; configuration targets are not substituted. </span><span>{mode==='final'?'In-progress results stay visible and unranked.':'Missing evaluations stay unranked.'}</span><span>Auto-research entries rank on CORE only; their validation BPB is shown, not ranked.</span></div>
+   <div className="leaderboard-caption"><span>{mode==='final'?<>Final rankings use measured results at step {number(FINAL_STEP)}. Final val BPB is the last periodic validation checkpoint.</>:<>Replay rankings use exactly the same evaluation step for every ranked model. Rows move as measured checkpoints arrive.</>}</span><span>Training compute is estimated per input token; configuration targets are not substituted. </span><span>{mode==='final'?'In-progress results stay visible and unranked.':'Missing evaluations stay unranked.'}</span><span>Auto-research entries rank on CORE only; their validation BPB is shown, not ranked.</span>
+    <div className="leaderboard-core-context">
+     <p>Only {longTasks.length} of {coreLengths.taskCount} CORE tasks contain prompts longer than the {number(coreLengths.trainingTokens)}-token training context ({new Intl.ListFormat('en').format(longTasks)}).</p>
+     <p><strong>Methods evaluated within the training context length:</strong> {lengthGroups.within.join(', ') || 'None'}</p>
+     <p><strong>Methods evaluated beyond the training context length:</strong> {lengthGroups.beyond.join(', ') || 'None'}</p>
+    </div>
+   </div>
   </div>
  </section>;
 }
