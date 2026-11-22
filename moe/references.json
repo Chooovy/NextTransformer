@@ -1,0 +1,127 @@
+{
+  "note": "Reference numbers for the two MoE tracks. Marin numbers come from a different tokenizer (Llama 3, vocab 128,256) and data (Nemotron-CC mix) and include GatedNorm/XSA/attention gates; their losses are not comparable with this track's BPB. Planning throughput is an estimate, not a measurement: the official number of a track is the baseline measured by moe.throughput, recorded here once a maintainer has run it.",
+  "tracks": {
+    "d768": {
+      "protocol": {
+        "sequence_len": 4096,
+        "tokens_per_update": 262144,
+        "updates": 16875,
+        "total_tokens": 4423680000,
+        "flops_per_token": 915429888.0,
+        "training_flops": 4.04956888694784e+18,
+        "parameters": {
+          "total": 1992831744,
+          "active": 209203968,
+          "embedding": 77070336,
+          "head": 77070336,
+          "active_non_embedding": 55063296,
+          "total_non_embedding": 1838691072
+        },
+        "tokens_per_active_parameter": 21.15
+      },
+      "marin": {
+        "run": "moe_may_compute_opt_d768_ep1",
+        "wandb": "https://wandb.ai/marin-community/marin_moe/runs/moe_may_compute_opt_d768_ep1",
+        "source": "https://github.com/marin-community/marin/blob/cd0e932c780e0171c5612658faa0f180a851569e/experiments/grug/moe/README.md",
+        "issue": "https://github.com/marin-community/marin/issues/6074",
+        "budget_flops": 2.81e+18,
+        "budget_in_marin_convention_here": 2797401035243520000,
+        "active_non_embedding_parameters": 58600000.0,
+        "paloma_macro_loss": 3.2273,
+        "tokens_per_second": 294726,
+        "hardware": "TPU v4-32, expert parallelism 1",
+        "runtime_hours": 4.83
+      },
+      "throughput_planning": {
+        "devices": 8,
+        "device_peak_bf16_flops": 989400000000000.0,
+        "assumed_mfu": 0.103,
+        "mfu_source": "Marin grug fast_track 8-device MoE ladder (d768 10.3%, d1024 13.9%), applied to this track's FLOPs per token, which include the output head; conservative",
+        "tokens_per_second": 890582,
+        "tokens_per_second_per_device": 111323,
+        "hours": 1.38,
+        "device_hours": 11.0
+      },
+      "throughput_measured": null,
+      "baseline_result": null
+    },
+    "d1024": {
+      "protocol": {
+        "sequence_len": 4096,
+        "tokens_per_update": 524288,
+        "updates": 16080,
+        "total_tokens": 8430551040,
+        "flops_per_token": 1656268800.0,
+        "training_flops": 1.3963258654359552e+19,
+        "parameters": {
+          "total": 4701051904,
+          "active": 341072896,
+          "embedding": 102760448,
+          "head": 102760448,
+          "active_non_embedding": 135552000,
+          "total_non_embedding": 4495531008
+        },
+        "tokens_per_active_parameter": 24.72
+      },
+      "marin": {
+        "run": "moe_may_compute_opt_d1024_ep1",
+        "wandb": "https://wandb.ai/marin-community/marin_moe/runs/moe_may_compute_opt_d1024_ep1",
+        "source": "https://github.com/marin-community/marin/blob/cd0e932c780e0171c5612658faa0f180a851569e/experiments/grug/moe/README.md",
+        "issue": "https://github.com/marin-community/marin/issues/6074",
+        "budget_flops": 1.16e+19,
+        "budget_in_marin_convention_here": 11524227128748933120,
+        "active_non_embedding_parameters": 142000000.0,
+        "paloma_macro_loss": 3.0195,
+        "tokens_per_second": 219720,
+        "hardware": "TPU v4-32, expert parallelism 1",
+        "runtime_hours": 11.72
+      },
+      "throughput_planning": {
+        "devices": 8,
+        "device_peak_bf16_flops": 989400000000000.0,
+        "assumed_mfu": 0.139,
+        "mfu_source": "Marin grug fast_track 8-device MoE ladder (d768 10.3%, d1024 13.9%), applied to this track's FLOPs per token, which include the output head; conservative",
+        "tokens_per_second": 664272,
+        "tokens_per_second_per_device": 83034,
+        "hours": 3.53,
+        "device_hours": 28.2
+      },
+      "throughput_measured": null,
+      "baseline_result": null
+    }
+  },
+  "quality_context": {
+    "note": "Published scores of related models with larger budgets; context for CORE-22, not targets.",
+    "attnres_feedback_moe": [
+      {
+        "model": "MoE-1.6B (d768, 8 layers, 384 experts top-8, 2 shared)",
+        "active_non_embedding": 61000000.0,
+        "tokens": 47900000000.0,
+        "sequence_len": 4096,
+        "core22": 0.245
+      },
+      {
+        "model": "MoE-2.6B (d896, 10 layers, 384 experts top-8, 2 shared)",
+        "active_non_embedding": 102000000.0,
+        "tokens": 80700000000.0,
+        "sequence_len": 4096,
+        "core22": 0.2906
+      }
+    ],
+    "attnres_feedback_dense": [
+      {
+        "model": "dense d16 (242M)",
+        "tokens": 10000000000.0,
+        "sequence_len": 2048,
+        "core22": 0.1866
+      },
+      {
+        "model": "dense d16 (242M)",
+        "tokens": 24000000000.0,
+        "sequence_len": 2048,
+        "core22": 0.2034
+      }
+    ],
+    "core_seed_noise": "about 0.9 CORE points between seeds (Attnres_Feedback)"
+  }
+}
