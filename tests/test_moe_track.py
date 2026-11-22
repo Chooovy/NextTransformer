@@ -51,13 +51,16 @@ def test_tracks_follow_the_marin_cells():
     assert spec.long_layers(8) == (3, 7) and spec.long_layers(11) == (3, 7, 10)
 
 
-def test_schedule_warms_up_and_decays_to_zero():
+def test_schedule_and_optimizer_hyperparameters_follow_marin():
     t = spec.TRACKS["d768"]
-    assert t.warmup_steps == 169
-    assert spec.learning_rate(0, t) == pytest.approx(t.peak_lr / 169)
-    assert spec.learning_rate(168, t) == pytest.approx(t.peak_lr)
-    assert spec.learning_rate(t.updates, t) == pytest.approx(0.0)
-    assert all(spec.learning_rate(s, t) >= spec.learning_rate(s + 1, t) for s in range(169, t.updates, 97))
+    assert t.warmup_steps == 168 and spec.TRACKS["d1024"].warmup_steps == 160
+    assert spec.schedule(0, t) == 0.0 and spec.schedule(84, t) == pytest.approx(0.5)
+    assert spec.schedule(168, t) == pytest.approx(1.0) and spec.schedule(t.updates, t) == pytest.approx(0.0)
+    assert t.adam_lr == pytest.approx(0.00193222, rel=1e-5) and t.muonh_lr == pytest.approx(0.00837296, rel=1e-5)
+    assert spec.TRACKS["d1024"].adam_lr == pytest.approx(0.00202863, rel=1e-5)
+    assert t.beta2 == pytest.approx(0.999 ** 2) and spec.TRACKS["d1024"].beta2 == pytest.approx(0.999 ** 4)
+    assert t.eps == pytest.approx(1.257e-15, rel=1e-3)
+    assert all(spec.schedule(s, t) >= spec.schedule(s + 1, t) for s in range(168, t.updates, 97))
 
 
 def test_config_roundtrip_and_tamper_detection(tmp_path):
@@ -111,17 +114,19 @@ def test_debug_model_trains_one_step():
     assert logits.shape == (2, 64, 512)
 
 
-def test_router_gates_and_balancing():
+def test_quantile_balancing_router():
     config = MoEConfig.baseline("d768").debug()
     router = Router(config, 0)
     torch.nn.init.normal_(router.weight)
+    router.tokens_per_row = 10
     x = torch.randn(100, config.width)
     index, gates, aux = router.train()(x)
     assert index.shape == gates.shape == (100, config.top_k) and aux is None
-    torch.testing.assert_close(gates.sum(-1), torch.full((100,), config.routing_renorm_sum))
-    load = router.load.clone()
-    router.balance(load)
-    assert torch.all((router.bias > 0) == (load < load.mean())) or torch.all(router.bias[load == load.mean()] == 0)
+    torch.testing.assert_close(gates.sum(-1), torch.full((100,), config.routing_renorm_sum), rtol=1e-5, atol=1e-5)
+    assert router.beta_count.item() == 10   # ten groups of one 10-token row
+    beta = router.beta_sum / router.beta_count
+    router.balance(router.beta_sum, router.beta_count)
+    torch.testing.assert_close(router.bias, -beta + beta.mean())
 
 
 def test_dropless_experts_match_a_dense_reference():
@@ -133,19 +138,20 @@ def test_dropless_experts_match_a_dense_reference():
     x = torch.randn(10, config.width)
     index = torch.stack([torch.randperm(config.routed_experts)[:config.top_k] for _ in range(10)])
     gates = torch.rand(10, config.top_k)
+    silu = torch.nn.functional.silu
     reference = torch.zeros_like(x)
     for n in range(10):
         for j in range(config.top_k):
             e = index[n, j]
-            g, u = (experts.w_in[e] @ x[n]).chunk(2)
-            reference[n] += gates[n, j] * (experts.w_out[e] @ (torch.nn.functional.silu(g) * u))
+            h = silu(experts.w_gate[e] @ x[n]) * (experts.w_up[e] @ x[n])
+            reference[n] += gates[n, j] * (experts.w_down[e] @ h)
     torch.testing.assert_close(experts(x, index, gates), reference)
     # The grouped-GEMM layout (padded groups, transposed weights) computes the same function.
     flat = index.flatten()
     order = torch.argsort(flat, stable=True)
     counts = torch.bincount(flat, minlength=config.routed_experts)
 
-    def grouped_mm(a, b, offs):   # a reference implementation of torch._grouped_mm's contract
+    def grouped_mm(a, b, offs):   # torch._grouped_mm's contract
         out, start = [], 0
         for e, end in enumerate(offs.tolist()):
             out.append(a[start:end] @ b[e])
@@ -155,7 +161,7 @@ def test_dropless_experts_match_a_dense_reference():
     original = getattr(torch, "_grouped_mm", None)
     torch._grouped_mm = grouped_mm
     try:
-        ys = experts._grouped(x[order // config.top_k], counts, experts.w_in, experts.w_out)
+        ys = experts._grouped(x[order // config.top_k], counts, experts.w_gate, experts.w_up, experts.w_down)
     finally:
         if original is None:
             del torch._grouped_mm
@@ -166,15 +172,72 @@ def test_dropless_experts_match_a_dense_reference():
     torch.testing.assert_close(combined, loop)
 
 
-def test_parameter_counts_agree_with_the_shapes():
-    counts = build_model(MoEConfig.baseline("d768"), "meta").parameter_counts()
-    d, L, E, f, s, V = 768, 8, 256, 384, 768, 100352
-    attention = L * (d * 6 * 128 + 2 * d * 128 + 6 * 128 * d)
-    experts = L * E * 3 * d * f
-    other = L * (3 * d * s + E * d + 2 * d) + d + 2 * V * d
-    assert counts["total"] == attention + experts + other
-    assert counts["active"] == counts["total"] - experts + experts * 4 // E
-    assert 55e6 < counts["active_non_embedding"] < 60e6   # Marin reports 58.6M incl. GatedNorm/gates
+@pytest.mark.parametrize("track, marin_active", [("d768", 58_641_920), ("d1024", 141_937_408)])
+def test_parameter_counts_match_marin(track, marin_active):
+    config = MoEConfig.baseline(track)
+    counts = build_model(config, "meta").parameter_counts()
+    # Marin counts every parameter except embedding and head; its router bias is a buffer here.
+    assert counts["active_non_embedding"] == marin_active - config.layers * config.routed_experts
+
+
+def test_document_mask_isolates_documents():
+    model = debug_model().eval()
+    a = torch.randint(1, 512, (1, 40))
+    b = a.clone()
+    b[0, :20] = torch.randint(1, 512, (20,))   # change only the first document
+    a[0, 20] = b[0, 20] = 0                   # separator: the second document starts here
+    torch.testing.assert_close(model(a)[0, 20:], model(b)[0, 20:])
+
+
+def test_left_padding_is_exact_for_generation():
+    model = debug_model().eval()
+    prompt = torch.cat((torch.zeros(1, 1, dtype=torch.long), torch.randint(1, 512, (1, 30))), dim=1)
+    padded = torch.cat((torch.zeros(1, 9, dtype=torch.long), prompt), dim=1)
+    torch.testing.assert_close(model(padded)[0, -1], model(prompt)[0, -1], rtol=1e-4, atol=1e-4)
+
+
+def test_evaluation_path_switches_off_flex_attention():
+    from moe import model as model_lib
+    assert model_lib.FLEX
+    with model_lib.eager_attention():
+        assert not model_lib.FLEX
+        mask = model_lib.build_mask(torch.zeros(1, 8, dtype=torch.long), 3)
+        assert mask.dtype is torch.bool and mask.shape == (1, 1, 8, 8)
+    assert model_lib.FLEX
+
+
+def test_resume_reads_events_without_a_step(tmp_path):
+    from moe.train import recorded
+    (tmp_path / "metrics.jsonl").write_text("\n".join([
+        json.dumps(dict(event="val", step=0, val={"macro_bpb": 2.0})),
+        json.dumps(dict(event="throughput", tokens_per_second=1.0)),   # older runs wrote no step
+    ]) + "\n")
+    assert recorded(tmp_path) == {("val", 0), ("throughput", None)}
+
+
+def test_muonh_keeps_matrix_norms_and_assigns_marin_groups():
+    from moe import optim
+    model = debug_model()
+    opt = optim.build(model, spec.TRACKS["d768"])
+    kinds = {opt.names[p]: g["kind"] for g in opt.param_groups for p in g["params"]}
+    assert kinds["embed.weight"] == "adam" and kinds["head.weight"] == "adamh"
+    assert kinds["blocks.0.ffn.router.weight"] == "adam" and kinds["blocks.0.attn.head_gate.weight"] == "adam"
+    assert kinds["blocks.0.attn.q.weight"] == kinds["blocks.0.ffn.experts.w_gate"] == "muonh"
+    assert kinds["blocks.0.attn_gated.down.weight"] == "muonh" and kinds["final_norm.weight"] == "adam"
+    before = {n: p.detach().clone() for n, p in model.named_parameters()}
+    opt.set_schedule(1.0)
+    idx = torch.randint(0, 512, (2, 64))
+    model(idx, idx).backward()
+    opt.step()
+    for name in ("blocks.0.attn.q.weight", "head.weight"):
+        p = dict(model.named_parameters())[name]
+        assert not torch.equal(p, before[name])
+        torch.testing.assert_close(p.norm(), before[name].norm())
+    w = dict(model.named_parameters())["blocks.0.ffn.experts.w_up"]
+    torch.testing.assert_close(w.norm(dim=(1, 2)), before["blocks.0.ffn.experts.w_up"].norm(dim=(1, 2)))
+    ortho = optim.newton_schulz(torch.randn(3, 16, 40))
+    singular = torch.linalg.svdvals(ortho)
+    assert singular.min() > 0.5 and singular.max() < 1.3
 
 
 def test_attention_edges():
@@ -188,11 +251,11 @@ def test_measured_cost_equals_the_closed_form():
     assert compute.measure(config, tokens=128)["flops_per_token"] == compute.analytic(config)["total"]
 
 
-@pytest.mark.parametrize("track, flops, marin", [("d768", 915_429_888, 2.81e18), ("d1024", 1_656_268_800, 1.16e19)])
+@pytest.mark.parametrize("track, flops, marin", [("d768", 936_884_736, 2.81e18), ("d1024", 1_694_558_208, 1.16e19)])
 def test_track_budgets(track, flops, marin):
     row = compute.report()[track]
     assert row["flops_per_token"] == flops
-    # Marin's own convention (6N_active + non-causal attention, no head) reproduces its reported budget.
+    # Marin's own budget formula (no head, GatedNorms or gates; non-causal attention) reproduces its budget.
     assert row["marin_convention_budget"] == pytest.approx(marin, rel=0.01)
 
 
@@ -262,39 +325,35 @@ def test_dolma2_tokenizer_matches_known_ids():
 
 
 @needs_tokenizer
-@pytest.mark.parametrize("length", [2048, 3072, 4096, 8192])
-def test_long_context_examples_have_exact_lengths(length):
-    from moe.evaluation import longctx
+def test_ruler_samples_fit_their_lengths():
+    from moe.evaluation import ruler
     from moe.tokenizer import Dolma2Tokenizer
     tok = Dolma2Tokenizer()
-    haystack = longctx.Haystack(np.array(tok.encode("Natural text about many things. " * 4000) + [100257] * 3),
-                                tok)
-    for task in longctx.TASKS:
-        a = longctx.build(task, length, 3, tok, haystack)
-        b = longctx.build(task, length, 3, tok, haystack)
-        assert a == b
-        longest = max(len(a["prefix"]) + len(x) for x in a["answers"])
-        assert longest == length
-        assert len(a["answers"]) == (4 if task == "niah_choice" else 1)
+    table = ruler.samples()["samples"]
+    assert set(table) == {"2048", "4096", "8192"} and all(len(v) == ruler.SAMPLES for v in table.values())
+    for length, rows in table.items():
+        for key, value, index, lines in rows[:5]:
+            text = ruler.render(key, value, index, lines)
+            assert f"One of the special magic numbers for {key} is: {value}." in text
+            assert text.endswith(f"The special magic number for {key} mentioned in the provided text is")
+            assert 1 + len(tok.encode(text)) + ruler.TOKENS_TO_GENERATE <= int(length)
 
 
-@needs_tokenizer
-def test_long_context_scoring_runs_on_a_debug_model():
-    from moe.evaluation import longctx
-    model = debug_model(vocab_size=100_352).eval()   # full vocabulary, tiny everything else
-    tokens = np.random.default_rng(0).integers(0, 100_000, 50_000)
-    result = longctx.evaluate(model, tokens, torch.device("cpu"), lengths=(128,), examples=2,
-                              tasks=("passkey", "niah_choice"))
-    assert set(result["accuracy"]) == {"passkey", "niah_choice"}
-    assert all(0 <= v["128"] <= 1 for v in result["accuracy"].values())
+def test_recall_scoring_is_lm_eval_contains():
+    from moe.evaluation import recall
+    assert recall.contains("Clearance of a New Device.", "clearance of a new device")
+    assert not recall.contains("1982", "1983")
 
 
 def test_moe_core_weights_every_entry_equally():
-    core = dict(centered_results={f"t{i}": 0.2 for i in range(22)}, core_metric=0.2)
-    lc = dict(centered={f"l{i}": 0.5 for i in range(5)}, lc_metric=0.5)
-    assert score.moe_core(core, lc)["moe_core"] == pytest.approx((22 * 0.2 + 5 * 0.5) / 27)
+    short = dict(centered={t: 0.2 for t in score.SHORT})
+    ruler_result = {"2048": 0.6, "4096": 0.4, "8192": 0.1}
+    result = score.moe_core(short, ruler_result, {"fda": 0.3, "swde": 0.5})
+    assert len(result["centered"]) == 14
+    assert result["moe_core"] == pytest.approx((10 * 0.2 + 0.6 + 0.4 + 0.3 + 0.5) / 14)
+    assert result["ruler_probe"] == {"8192": 0.1}
     with pytest.raises(ValueError):
-        score.moe_core(dict(centered_results={}, core_metric=0), lc)
+        score.moe_core(short, {"2048": 0.6}, {"fda": 0.3, "swde": 0.5})
 
 
 # --- trainer and audit ----------------------------------------------------------------------------------------

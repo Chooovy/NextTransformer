@@ -1,5 +1,5 @@
 {
-  "note": "Reference numbers for the two MoE tracks. Marin numbers come from a different tokenizer (Llama 3, vocab 128,256) and data (Nemotron-CC mix) and include GatedNorm/XSA/attention gates; their losses are not comparable with this track's BPB. Planning throughput is an estimate, not a measurement: the official number of a track is the baseline measured by moe.throughput, recorded here once a maintainer has run it.",
+  "note": "Reference numbers for the two MoE tracks. Marin numbers come from a different tokenizer (Llama 3, vocab 128,256) and data (Nemotron-CC mix); their losses are not comparable with this track's BPB. The throughput of a track is the baseline measured by moe.throughput on one 8-device node; a method's published number is its throughput relative to the baseline in the same invocation.",
   "tracks": {
     "d768": {
       "protocol": {
@@ -32,17 +32,25 @@
         "hardware": "TPU v4-32, expert parallelism 1",
         "runtime_hours": 4.83
       },
-      "throughput_planning": {
+      "throughput_measured": {
+        "harness": "python -m moe.throughput (10 warm-up + 30 timed updates, 10% trimmed)",
         "devices": 8,
-        "device_peak_bf16_flops": 989400000000000.0,
-        "assumed_mfu": 0.103,
-        "mfu_source": "Marin grug fast_track 8-device MoE ladder (d768 10.3%, d1024 13.9%), applied to this track's FLOPs per token, which include the output head; conservative",
-        "tokens_per_second": 890582,
-        "tokens_per_second_per_device": 111323,
-        "hours": 1.38,
-        "device_hours": 11.0
+        "device_class": "8 x 141 GiB SXM, bf16 peak 989.4 TFLOP/s",
+        "torch": "2.9.1+cu128",
+        "measured": "2026-11-22",
+        "micro_batch": 8,
+        "tokens_per_second": 686005,
+        "tokens_per_second_per_device": 85751,
+        "mfu": 0.081,
+        "alternative": {
+          "micro_batch_4": {
+            "tokens_per_second": 583495,
+            "mfu": 0.069
+          }
+        },
+        "hours": 1.79,
+        "device_hours": 14.3
       },
-      "throughput_measured": null,
       "baseline_result": null
     },
     "d1024": {
@@ -76,17 +84,20 @@
         "hardware": "TPU v4-32, expert parallelism 1",
         "runtime_hours": 11.72
       },
-      "throughput_planning": {
+      "throughput_measured": {
+        "harness": "python -m moe.throughput (10 warm-up + 30 timed updates, 10% trimmed)",
         "devices": 8,
-        "device_peak_bf16_flops": 989400000000000.0,
-        "assumed_mfu": 0.139,
-        "mfu_source": "Marin grug fast_track 8-device MoE ladder (d768 10.3%, d1024 13.9%), applied to this track's FLOPs per token, which include the output head; conservative",
-        "tokens_per_second": 664272,
-        "tokens_per_second_per_device": 83034,
-        "hours": 3.53,
-        "device_hours": 28.2
+        "device_class": "8 x 141 GiB SXM, bf16 peak 989.4 TFLOP/s",
+        "torch": "2.9.1+cu128",
+        "measured": "2026-11-22",
+        "micro_batch": 8,
+        "tokens_per_second": 536017,
+        "tokens_per_second_per_device": 67002,
+        "mfu": 0.115,
+        "note": "micro-batch 16 does not fit in 140 GiB per device (out of memory)",
+        "hours": 4.37,
+        "device_hours": 35.0
       },
-      "throughput_measured": null,
       "baseline_result": null
     }
   },

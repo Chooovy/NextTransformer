@@ -11,8 +11,8 @@ Every run writes to --output:
 
     run.json         provenance (protocol, track, model, cost record and data fingerprints; mode; layout)
     metrics.jsonl    one JSON event per line: train (every 10 updates), val (every 500 updates and the end),
-                     eval (CORE-22 + LC-5 at the track's four evaluation steps), final (full validation BPB,
-                     long-document BPB), throughput (steady-state tokens/s and MFU)
+                     eval (MoE-CORE: 10 short tasks, RULER S-NIAH-1, FDA, SWDE at the track's four evaluation
+                     steps), final (full validation BPB + MoE-CORE), throughput (steady-state tokens/s and MFU)
     ledger.json      updates, input tokens and charged training FLOPs
     checkpoint_<step>/  torch.distributed.checkpoint shards (model, optimizer) at evaluation steps and every 1,000 updates
 
@@ -33,8 +33,8 @@ import torch.distributed as dist
 
 from moe import compute
 from moe.data import Rows, directory, micro_batches, verify
-from moe.model import build_model
-from moe.spec import PROTOCOL, REPO, learning_rate, load_config, track as get_track
+from moe.model import build_model, eager_attention
+from moe.spec import PROTOCOL, REPO, learning_rate, load_config, schedule, track as get_track
 
 CHECKPOINT_EVERY = 1000
 LOG_EVERY = 10
@@ -75,10 +75,9 @@ def shard(model, device):
 
 
 def optimizer(model, track):
-    decay = [p for p in model.parameters() if p.ndim >= 2]
-    rest = [p for p in model.parameters() if p.ndim < 2]
-    groups = [dict(params=decay, weight_decay=PROTOCOL.weight_decay), dict(params=rest, weight_decay=0.0)]
-    return torch.optim.AdamW(groups, lr=track.peak_lr, betas=PROTOCOL.betas, eps=PROTOCOL.eps)
+    """Marin's MuonH / AdamH / Adam groups (moe/optim.py)."""
+    from moe.optim import build
+    return build(model, track)
 
 
 def token_bytes(config):
@@ -129,26 +128,23 @@ def autocast(device):
     return torch.autocast("cuda", dtype=torch.bfloat16) if device.type == "cuda" else nullcontext()
 
 
-def evaluate_all(model, config, device, resources, *, core_max_per_task=-1, lc_examples=None, final=False):
-    from moe.evaluation import bpb, core, longctx, score
+def evaluate_all(model, config, device, resources, *, max_per_task=-1, long_limit=None, final=False):
+    """Validation BPB, then (formal scale) the MoE-CORE suite: 10 short tasks, RULER S-NIAH-1, FDA and SWDE."""
+    from moe.evaluation import bpb, recall, ruler, score, short
     out = directory(resources)
-    table = token_bytes(config)
     replica = eval_replica(model, config, device)
     replica.eval()
     result = {}
-    with autocast(device):
-        result["val"] = bpb.evaluate(replica, out / "val", table, device, rows_per_source=None if final else
-                                     PROTOCOL.val_rows_per_source)
+    with autocast(device), eager_attention():
+        result["val"] = bpb.evaluate(replica, out / "val", token_bytes(config), device,
+                                     rows_per_source=None if final else PROTOCOL.val_rows_per_source)
         if config.scale == "formal":
-            haystack = Rows(out / "val" / f"{longctx.HAYSTACK_SOURCE}.bin").tokens
-            result["core"] = core.evaluate(replica, resources, device, max_per_task=core_max_per_task)
-            result["lc"] = longctx.evaluate(replica, haystack, device, examples=lc_examples or longctx.EXAMPLES)
-            if core_max_per_task <= 0 and not lc_examples:
-                result["score"] = score.moe_core(result["core"], result["lc"])
-            if final:
-                from moe.spec import VALIDATION_SOURCES
-                sources = {s: Rows(out / "val" / f"{s}.bin").tokens for s in VALIDATION_SOURCES}
-                result["long_document_bpb"] = longctx.long_document_bpb(replica, sources, table, device)
+            result["short"] = short.evaluate(replica, resources, device, max_per_task=max_per_task)
+            result["ruler"] = ruler.evaluate(replica, device, limit=long_limit)
+            result["recall"] = recall.evaluate(replica, {t: out / "eval" / f"{t}.parquet" for t in recall.DATASETS},
+                                               device, limit=long_limit)
+            if max_per_task <= 0 and long_limit is None:
+                result["score"] = score.moe_core(result["short"], result["ruler"], result["recall"])
     if replica is not model:
         del replica
         torch.cuda.empty_cache()
@@ -202,9 +198,9 @@ def main(argv=None):
     p.add_argument("--formal", action="store_true")
     p.add_argument("--resume", type=Path, help="a checkpoint_<step> directory of this run")
     p.add_argument("--smoke-steps", type=int, help="research: stop after this many updates")
-    p.add_argument("--core-max-per-task", type=int, default=-1, help="research: CORE examples per task")
-    p.add_argument("--lc-examples", type=int, help="research: long-context examples per task and length")
-    p.add_argument("--no-eval", action="store_true", help="research: skip CORE/LC-5 events")
+    p.add_argument("--max-per-task", type=int, default=-1, help="research: examples per short task")
+    p.add_argument("--long-limit", type=int, help="research: examples per long task (and RULER length)")
+    p.add_argument("--no-eval", action="store_true", help="research: skip MoE-CORE events")
     args = p.parse_args(argv)
 
     from moe.plugins import config_for
@@ -217,12 +213,12 @@ def main(argv=None):
     if args.debug:
         config = config.debug()
     track = get_track(config.track)
-    if args.formal and (args.debug or args.core_max_per_task > 0 or args.lc_examples or args.no_eval):
+    if args.formal and (args.debug or args.max_per_task > 0 or args.long_limit or args.no_eval):
         p.error("formal runs use the full model, schedule and evaluation")
 
     rank, world, device = initialize()
     run = Run(args.output, rank)
-    manifest_digest = verify(args.resources, None if args.debug else track.name, full=args.formal)
+    manifest_digest = verify(args.resources, track.name if args.formal else None, full=args.formal)
     record = formal_checks(config, calibration, manifest_digest, args, world, track) if args.formal else None
     flops_per_token = record["flops_per_token"] if record else compute.analytic(config)["total"]
 
@@ -235,6 +231,9 @@ def main(argv=None):
     accumulation = share // args.micro_batch if share % args.micro_batch == 0 else None
     if not accumulation:
         raise ValueError(f"micro-batch {args.micro_batch} must divide the {share} rows each rank holds per update")
+    if args.micro_batch % config.qb_group_rows:
+        raise ValueError(f"micro-batch {args.micro_batch} must hold whole quantile-balancing groups "
+                         f"({config.qb_group_rows} rows)")
     start = load(model, opt, args.resume) if args.resume else 0   # checkpoints store completed updates
     done = recorded(args.output) if args.resume else set()
     updates = min(track.updates, args.smoke_steps) if args.smoke_steps else track.updates
@@ -258,17 +257,17 @@ def main(argv=None):
         if (step in val_steps or step in eval_steps) and ("eval" if step in eval_steps else "val", step) not in done:
             is_eval = step in eval_steps
             result = evaluate_all(model, config, device, args.resources, final=False,
-                                  core_max_per_task=args.core_max_per_task, lc_examples=args.lc_examples) \
+                                  max_per_task=args.max_per_task, long_limit=args.long_limit) \
                 if is_eval else dict(val=_val_only(model, config, device, args.resources))
             run.event("eval" if is_eval else "val", step=step, **result)
             print0(f"step {step}: val macro BPB {result['val']['macro_bpb']:.4f}"
-                   + (f", CORE-22 {result['core']['core_metric']:.4f}, LC-5 {result['lc']['lc_metric']:.4f}"
-                      if "core" in result else ""))
+                   + (f", MoE-CORE {result['score']['moe_core']:.4f} (short {result['score']['short']:.4f}, "
+                      f"long {result['score']['long']:.4f})" if "score" in result else ""))
         if step == updates:
             break
         started = time.perf_counter()
         lr = learning_rate(step, track)
-        total, norm = update(model, opt, rows, step, lr, rank, world, rows_per_update, args.micro_batch,
+        total, norm = update(model, opt, rows, step, schedule(step, track), rank, world, rows_per_update, args.micro_batch,
                              accumulation, device)
         elapsed = time.perf_counter() - started
         if step >= start + 5:   # skip warm-up updates (allocation, autotuning)
@@ -289,12 +288,14 @@ def main(argv=None):
     if window:
         steady = sorted(window)[len(window) // 10: len(window) - len(window) // 10] or window
         mean = sum(steady) / len(steady)
-        run.event("throughput", updates_timed=timed, seconds_per_update=mean,
+        run.event("throughput", step=step, updates_timed=timed, seconds_per_update=mean,
                   tokens_per_second=tokens_per_update / mean, tokens_per_second_per_device=tokens_per_update / mean / world,
                   mfu=flops_per_token * tokens_per_update / mean / (world * PEAK_BF16_FLOPS) if device.type == "cuda" else None)
+    if args.smoke_steps and not args.debug:   # research: keep the end state so resuming can be exercised
+        save(model, opt, updates, args.output)
     if updates == track.updates and not args.debug:
         final = evaluate_all(model, config, device, args.resources, final=True,
-                             core_max_per_task=args.core_max_per_task, lc_examples=args.lc_examples)
+                             max_per_task=args.max_per_task, long_limit=args.long_limit)
         run.event("final", step=updates, **final)
         save(model, opt, updates, args.output)
     run.event("end", step=updates)
@@ -302,10 +303,11 @@ def main(argv=None):
         dist.destroy_process_group()
 
 
-def update(model, opt, rows, step, lr, rank, world, rows_per_update, micro_batch, accumulation, device):
-    """One optimizer update of the shared recipe; returns (mean loss over the update, gradient norm)."""
-    for group in opt.param_groups:
-        group["lr"] = lr
+def update(model, opt, rows, step, multiplier, rank, world, rows_per_update, micro_batch, accumulation, device):
+    """One optimizer update of the shared recipe; returns (mean loss over the update, gradient norm).
+
+    `multiplier` is the schedule value for this step (each optimizer group scales its own peak rate)."""
+    opt.set_schedule(multiplier)
     total = torch.zeros((), device=device)
     for i, (x, y) in enumerate(micro_batches(rows, step, rank, world, rows_per_update, micro_batch, device)):
         if hasattr(model, "set_requires_gradient_sync"):
@@ -317,7 +319,8 @@ def update(model, opt, rows, step, lr, rank, world, rows_per_update, micro_batch
         objective.backward()
         total += loss.detach() / accumulation
     balance_routers(model, world)
-    norm = torch.nn.utils.clip_grad_norm_(model.parameters(), PROTOCOL.grad_clip)
+    # Marin clips nothing; the norm is only logged (max_norm=inf leaves gradients unchanged)
+    norm = torch.nn.utils.clip_grad_norm_(model.parameters(), float("inf"))
     opt.step()
     opt.zero_grad(set_to_none=True)
     if world > 1:
@@ -339,13 +342,13 @@ def recorded(output):
     path = Path(output) / "metrics.jsonl"
     if not path.exists():
         return set()
-    return {(e["event"], e["step"]) for e in map(json.loads, path.read_text().splitlines())}
+    return {(e["event"], e.get("step")) for e in map(json.loads, path.read_text().splitlines())}
 
 
 def _val_only(model, config, device, resources):
     from moe.evaluation import bpb
     replica = eval_replica(model, config, device)
-    with autocast(device):
+    with autocast(device), eager_attention():
         result = bpb.evaluate(replica, directory(resources) / "val", token_bytes(config), device)
     if replica is not model:
         del replica
@@ -356,12 +359,17 @@ def _val_only(model, config, device, resources):
 
 @torch.no_grad()
 def balance_routers(model, world):
+    """Marin's QB update: the bias of every router becomes -beta + mean(beta), beta = mean over all groups."""
     for router in model.routers():
-        load = router.load
+        stats = torch.cat((router.beta_sum, router.beta_count.view(1), router.load))
         if world > 1:
-            dist.all_reduce(load)
-        router.balance(load)
-        load.zero_()
+            dist.all_reduce(stats)
+        E = router.beta_sum.numel()
+        router.load.copy_(stats[E + 1:])
+        router.balance(stats[:E], stats[E])
+        router.beta_sum.zero_()
+        router.beta_count.zero_()
+        router.load.zero_()
 
 
 @torch.no_grad()

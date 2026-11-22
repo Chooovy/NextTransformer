@@ -30,7 +30,7 @@ from moe import compute
 from moe.data import Rows, directory
 from moe.model import build_model
 from moe.plugins import config_for
-from moe.spec import PROTOCOL, config_path, learning_rate, load_config, track as get_track
+from moe.spec import PROTOCOL, config_path, load_config, schedule, track as get_track
 from moe.train import PEAK_BF16_FLOPS, initialize, optimizer, print0, shard, update
 
 WARMUP, MEASURED = 10, 30
@@ -62,7 +62,7 @@ def measure(method, track_name, resources, micro_batch, rank, world, device, *, 
     times = []
     for step in range(warmup + steps):
         started = time.perf_counter()
-        update(model, opt, rows, step, learning_rate(step, track), rank, world, rows_per_update, micro_batch,
+        update(model, opt, rows, step, schedule(step, track), rank, world, rows_per_update, micro_batch,
                accumulation, device)
         if step >= warmup:
             times.append(time.perf_counter() - started)

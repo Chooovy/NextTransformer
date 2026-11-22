@@ -14,11 +14,15 @@ Hooks, imported when the method is first built:
 
     router(config, layer) -> module     called as (x[N, d]) -> (index[N, k], gates[N, k], aux or None)
     ffn(config, layer) -> module        replaces the whole MoE FFN, called as (x[B, T, d]); may set `last_aux`
-    mixer(config, layer) -> module      replaces attention, called as (x, cos_sin); softmax attention must
-                                        call moe.model.attention so the ledger can charge its edges
-    block(block, config, layer)         wraps or replaces a block, called as (x, cos_sin)
+    mixer(config, layer) -> module      replaces attention, called as (x, cos_sin, masks); softmax attention must
+                                        call moe.model.attention(q, k, v, masks.get(window)) so the ledger
+                                        can charge its edges
+    block(block, config, layer)         wraps or replaces a block, called as (x, cos_sin, masks)
     model                               a subclass of moe.model.MoELM, for a different forward flow
     init(model)                         initializes the method's own parameters after the reference init
+
+Optimizer groups follow Marin's rules by parameter name (moe/optim.py): matrices get MuonH unless they are the
+embedding, a router (`.router.` in the name), a head-wise gate or the head.
     check(config)                       raises ValueError for invalid options
 
 A module may expose `last_aux` (a scalar auxiliary loss added in training). Routers that subclass
@@ -107,7 +111,7 @@ def model_class(name):
 
 def source_files(name):
     """Files whose code a method's cost record covers: its package and the shared MoE core."""
-    core = [Path(__file__).resolve().parent / f for f in ("model.py", "plugins.py", "compute.py", "spec.py")]
+    core = [Path(__file__).resolve().parent / f for f in ("model.py", "optim.py", "plugins.py", "compute.py", "spec.py")]
     own = sorted(Path(declaration(name)["path"]).rglob("*.py")) if name != "baseline" else []
     return [*core, *own]
 

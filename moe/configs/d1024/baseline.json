@@ -16,18 +16,15 @@
     "seed": 42,
     "data_parallel_size": 8,
     "dtype": "bfloat16",
-    "optimizer": "adamw",
-    "betas": [
-      0.9,
-      0.95
-    ],
-    "eps": 1e-08,
-    "weight_decay": 0.1,
-    "embedding_lr_multiplier": 1.0,
+    "optimizer": "muonh",
+    "beta1": 0.9062,
+    "muon_momentum": 0.95,
+    "newton_schulz_steps": 5,
+    "weight_decay": 0.0,
     "warmup_fraction": 0.01,
     "schedule": "linear-decay",
     "final_lr_fraction": 0.0,
-    "grad_clip": 1.0,
+    "grad_clip": 0.0,
     "val_every": 500,
     "val_rows_per_source": 128,
     "final_val": "all complete rows of every validation source",
@@ -39,7 +36,7 @@
       "d1024"
     ]
   },
-  "protocol_hash": "da133bffd0ed66ce7dcc1fcac3b38e5589b319dced2fc0cd7421b04a0f38fdc0",
+  "protocol_hash": "035e5de7331a708a5be9aa4712941a94b1cbddf0868cf181c592fea465b1bf24",
   "track": {
     "name": "d1024",
     "marin_run": "moe_may_compute_opt_d1024_ep1",
@@ -54,7 +51,7 @@
     "shared_expert_width": 1024,
     "rows_per_update": 128,
     "updates": 16080,
-    "peak_lr": 0.00203,
+    "qb_group_rows": 8,
     "core_steps": [
       4000,
       8000,
@@ -64,7 +61,7 @@
     "marin_budget_flops": 1.16e+19,
     "marin_tokens_per_second": 219720
   },
-  "track_hash": "160bcc5d4b78cd3d40c87e557a4365c9cdc026ef581927b557fa4def036d53ca",
+  "track_hash": "1b12b645cbe91ac6eb2ff2fa221d50088dcb89170f8d600626d359daf0cb5c00",
   "model": {
     "track": "d1024",
     "method": "baseline",
@@ -82,20 +79,25 @@
     "sliding_window": 2048,
     "long_layer_every": 4,
     "rope_theta": 10000.0,
+    "rope_dims": 64,
+    "qk_mult": 1.3,
+    "gated_norm_rank": 128,
     "norm_eps": 1e-05,
+    "qk_norm_eps": 1e-06,
     "routing_renorm_sum": 2.5,
-    "balance_rate": 0.001,
+    "qb_group_rows": 8,
     "init_scale": 0.5,
+    "document_token": 100257,
     "options": {},
     "scale": "formal"
   },
-  "model_hash": "f3722d6f496b1651d9849c003a6f713ed8b7f15e8be7633ecabd8bb831e86cdb",
+  "model_hash": "00ffaffc51556fc041e0aa243f4c50dea8cbcc8945e119c1922069fb4e2d6cee",
   "calibration": {
     "status": "admitted",
     "cost_record": "moe/evidence/costs/d1024/baseline.json",
-    "flops_per_token": 1656268800.0,
+    "flops_per_token": 1694558208.0,
     "relative_gap": 0.0,
-    "source_sha256": "8d7116d9a1585000ab1e07bc529ca98a942fb2c18a6a947d9b4da93b722750e5",
+    "source_sha256": "1c82e015c7f32d92e98c733a8a58097b17a07c21166c9937030747470a4f9711",
     "torch": "2.9.1"
   }
 }

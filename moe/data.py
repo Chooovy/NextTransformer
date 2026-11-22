@@ -16,7 +16,8 @@ Stream definition (identical for every method):
   validation split: each source is its own stream, scored on its first 128 rows at every validation event
   and on all complete rows at the end; BPB is the macro average over the six sources.
 
-`prepare` writes <root>/moe/{train.bin, dev.bin, val/<source>.bin, manifest.json, tokenizer/tokenizer.json}.
+`prepare` writes <root>/moe/{train.bin, dev.bin, val/<source>.bin, eval/{fda,swde}.parquet, manifest.json,
+tokenizer/tokenizer.json} and the pinned DCLM bundle at <root>/eval_bundle.
 Token files are little-endian uint32. The manifest pins every input file's SHA-256 and every output's
 SHA-256; training refuses resources whose manifest does not verify.
 """
@@ -32,6 +33,7 @@ import numpy as np
 
 from moe.spec import (DATA_REPO, DATA_REVISION, DEV_SHARD, PROTOCOL, TOKENIZER_JSON_SHA256, TOKENIZER_REPO,
                       TOKENIZER_REVISION, TRACKS, TRAIN_SHARD, VALIDATION_FILE, VALIDATION_SOURCES)
+from moe.evaluation.recall import DATASETS as RECALL
 from moe.tokenizer import EOT, Dolma2Tokenizer
 
 DTYPE = np.dtype("<u4")
@@ -92,7 +94,8 @@ def _write_stream(paths, out, limit, workers):
     return written
 
 
-def prepare(root, track_names=tuple(TRACKS), workers=None):
+def prepare(root, track_names=tuple(TRACKS), workers=None, limit_tokens=None):
+    """limit_tokens (research only) stops the training and development streams early; the manifest says so."""
     out = directory(root)
     (out / "val").mkdir(parents=True, exist_ok=True)
     (out / "tokenizer").mkdir(parents=True, exist_ok=True)
@@ -103,7 +106,7 @@ def prepare(root, track_names=tuple(TRACKS), workers=None):
     shutil.copyfile(tok_json, out / "tokenizer" / "tokenizer.json")
     inputs = {}
     # Training stream: download shards one at a time until the budget is covered.
-    limit = needed_tokens(track_names)
+    limit = needed_tokens(track_names) if limit_tokens is None else min(needed_tokens(track_names), limit_tokens)
     shards, have = [], 0
     stream = out / "train.bin"
     stream.unlink(missing_ok=True)
@@ -125,22 +128,31 @@ def prepare(root, track_names=tuple(TRACKS), workers=None):
     dev_name = TRAIN_SHARD.format(index=DEV_SHARD)
     dev_path = _download(dev_name, root)
     inputs[dev_name] = sha256(dev_path)
-    dev = _write_stream([dev_path], out / "dev.bin", DEV_TOKENS, workers)
+    dev = _write_stream([dev_path], out / "dev.bin", DEV_TOKENS if limit_tokens is None else min(DEV_TOKENS, limit_tokens),
+                        workers)
     val = {}
     for source in VALIDATION_SOURCES:
         name = VALIDATION_FILE.format(source=source)
         path = _download(name, root)
         inputs[name] = sha256(path)
         val[source] = _write_stream([path], out / "val" / f"{source}.bin", None, workers)
-    # CORE-22: the same pinned DCLM bundle the dense protocol uses (<root>/eval_bundle + core_manifest.json).
+    # Short tasks: the dense protocol's pinned DCLM bundle (<root>/eval_bundle + core_manifest.json).
     from nexttransformer.runtime.resources import prepare_core
     from nexttransformer.evaluation.metrics import verify_core
     prepare_core(Path(root))
     verify_core(root)
-    outputs = {str(p.relative_to(out)): sha256(p) for p in sorted(out.rglob("*.bin"))}
+    # FDA and SWDE (long-document recall), pinned by revision and SHA-256.
+    (out / "eval").mkdir(exist_ok=True)
+    for task, spec in RECALL.items():
+        path = _download(spec["file"], root, spec["repo"], spec["revision"])
+        if sha256(path) != spec["sha256"]:
+            raise ValueError(f"{task} data differ from the pinned file")
+        shutil.copyfile(path, out / "eval" / f"{task}.parquet")
+    outputs = {str(p.relative_to(out)): sha256(p) for p in sorted([*out.rglob("*.bin"), *out.glob("eval/*.parquet")])}
     outputs["tokenizer/tokenizer.json"] = TOKENIZER_JSON_SHA256
     manifest = dict(protocol=PROTOCOL.version, data_repo=DATA_REPO, data_revision=DATA_REVISION,
                     tokenizer_repo=TOKENIZER_REPO, tokenizer_revision=TOKENIZER_REVISION, tracks=list(track_names),
+                    partial=limit_tokens is not None,
                     train_tokens=have, dev_tokens=dev, validation_tokens=val, inputs=inputs, outputs=outputs)
     (out / "manifest.json").write_text(json.dumps(manifest, indent=2) + "\n")
     return manifest
@@ -152,7 +164,7 @@ def verify(root, track_name=None, full=True):
     manifest = json.loads((out / "manifest.json").read_text())
     if manifest["data_revision"] != DATA_REVISION or manifest["tokenizer_revision"] != TOKENIZER_REVISION:
         raise ValueError("prepared data come from a different data or tokenizer revision")
-    if track_name and manifest["train_tokens"] < TRACKS[track_name].total_tokens + 1:
+    if track_name and (manifest.get("partial") or manifest["train_tokens"] < TRACKS[track_name].total_tokens + 1):
         raise ValueError(f"prepared training stream is too short for {track_name}")
     if full:
         for name, digest in manifest["outputs"].items():
@@ -210,12 +222,13 @@ def main(argv=None):
     a.add_argument("--root", type=Path, required=True)
     a.add_argument("--track", action="append", choices=tuple(TRACKS))
     a.add_argument("--workers", type=int)
+    a.add_argument("--limit-tokens", type=int, help="research only: stop the training stream after N tokens")
     v = sub.add_parser("verify")
     v.add_argument("--root", type=Path, required=True)
     v.add_argument("--track", choices=tuple(TRACKS))
     args = p.parse_args(argv)
     if args.command == "prepare":
-        manifest = prepare(args.root, tuple(args.track or TRACKS), args.workers)
+        manifest = prepare(args.root, tuple(args.track or TRACKS), args.workers, args.limit_tokens)
         print(json.dumps({k: manifest[k] for k in ("train_tokens", "dev_tokens", "validation_tokens")}, indent=2))
     else:
         print(verify(args.root, args.track))

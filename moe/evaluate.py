@@ -1,10 +1,10 @@
-"""Evaluate a saved MoE checkpoint: validation BPB, CORE-22, LC-5, MoE-CORE and long-document BPB.
+"""Evaluate a saved MoE checkpoint: full validation BPB and the MoE-CORE suite.
 
-    torchrun --nproc_per_node 8 -m moe.evaluate --run runs/moe-d768-<method> \\
+    torchrun --nproc_per_node 8 -m moe.evaluate --run-dir runs/moe-d768-<method> \\
         --checkpoint runs/moe-d768-<method>/checkpoint_16875 --resources <resources> --output eval.json
 
 The configuration is read from the run's run.json; every rank loads the full checkpoint and scores its share of
-the examples. `--max-per-task` / `--lc-examples` give a quick, clearly labelled partial evaluation.
+the examples. `--max-per-task` / `--long-limit` give a quick, clearly labelled partial evaluation.
 """
 import argparse
 import json
@@ -29,25 +29,26 @@ def load_checkpoint(config, path, device):
 
 def main(argv=None):
     p = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
-    p.add_argument("--run", type=Path, required=True, help="the run directory (for run.json)")
+    p.add_argument("--run-dir", type=Path, required=True, help="the run directory (for run.json)")
+    # torchrun owns --run-path, so the flag cannot be a prefix of it
     p.add_argument("--checkpoint", type=Path, required=True)
     p.add_argument("--resources", type=Path, required=True)
     p.add_argument("--output", type=Path, required=True)
-    p.add_argument("--max-per-task", type=int, default=-1)
-    p.add_argument("--lc-examples", type=int)
+    p.add_argument("--max-per-task", type=int, default=-1, help="examples per short task (partial evaluation)")
+    p.add_argument("--long-limit", type=int, help="examples per long task (partial evaluation)")
     args = p.parse_args(argv)
-    run = json.loads((args.run / "run.json").read_text())
+    run = json.loads((args.run_dir / "run.json").read_text())
     config = MoEConfig.from_serialized(run["model"])
     rank, world, device = initialize()
-    if verify(args.resources, config.track, full=False) != run["data_manifest_sha256"]:
+    if verify(args.resources, None, full=False) != run["data_manifest_sha256"]:
         raise ValueError("checkpoint was trained on different prepared resources")
     model, step = load_checkpoint(config, args.checkpoint, device)
     if device.type == "cuda":
         model = model.to(torch.bfloat16)
     result = evaluate_all(model, config, device, args.resources, final=True,
-                          core_max_per_task=args.max_per_task, lc_examples=args.lc_examples)
+                          max_per_task=args.max_per_task, long_limit=args.long_limit)
     result.update(step=step, method=config.method, track=config.track, model_hash=config.fingerprint,
-                  partial=args.max_per_task > 0 or bool(args.lc_examples))
+                  partial=args.max_per_task > 0 or args.long_limit is not None)
     if rank == 0:
         args.output.write_text(json.dumps(result, indent=2) + "\n")
     if dist.is_initialized():

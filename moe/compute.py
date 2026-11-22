@@ -52,14 +52,16 @@ def attention_flops(config):
 
 def analytic(config):
     """Closed-form training FLOPs per token of the *baseline* structure (a cross-check of the measurement)."""
-    d, L, hd = config.width, config.layers, config.head_dim
+    d, L, hd, r = config.width, config.layers, config.head_dim, config.gated_norm_rank
     attn_proj = 2 * d * hd * (2 * config.heads + 2 * config.kv_heads)
+    head_gate = 2 * d * config.heads
+    gated_norms = 2 * (2 * d * r + 2 * r * d)          # attention and MLP GatedNorms of a block
     router = 2 * d * config.routed_experts
     routed = config.top_k * 6 * d * config.expert_width
     shared = 6 * d * config.shared_expert_width
-    head = 2 * d * config.vocab_size
-    forward = dict(attention_projections=L * attn_proj, router=L * router, routed_experts=L * routed,
-                   shared_expert=L * shared, head=head)
+    forward = dict(attention_projections=L * (attn_proj + head_gate), gated_norms=L * gated_norms + 2 * 4 * d * r,
+                   router=L * router, routed_experts=L * routed, shared_expert=L * shared,
+                   head=2 * d * config.vocab_size)
     train = {k: 3 * v for k, v in forward.items()}
     train["attention_kernel"] = attention_flops(config)
     train["total"] = sum(train.values())
@@ -71,7 +73,7 @@ def charged_attention():
     """Replace softmax attention by a zero-matmul stand-in that keeps every input in the autograd graph."""
     original = model_lib.attention
 
-    def stand_in(q, k, v, window):
+    def stand_in(q, k, v, mask):
         groups = q.size(2) // k.size(2)
         k, v = (t.repeat_interleave(groups, dim=2) for t in (k, v))
         return v + 0 * (q + k)
@@ -97,8 +99,10 @@ def measure(config, tokens=256, seed=0):
     hooks = hooks_for(config.method)
     rows = max(1, tokens // config.sequence_len)
     length = tokens // rows
+    rows = max(rows, config.qb_group_rows)        # the router balances whole groups of rows
+    tokens = rows * length
     per_block = []
-    with charged_attention(), torch.device("cpu"):
+    with charged_attention():
         if hooks.model is not None:
             lm = model_lib.build_model(config, "cpu").train()
             idx = torch.randint(0, config.vocab_size, (rows, length))
@@ -106,32 +110,27 @@ def measure(config, tokens=256, seed=0):
             per_block = None
         else:
             cos_sin = model_lib.rotary(config, length, "cpu")
+            masks = model_lib.Masks(torch.zeros(rows, length, dtype=torch.long), config)
             for layer in range(config.layers):
                 block = model_lib.Block(config, layer, hooks)
                 if hooks.block:
                     block = hooks.block(block, config, layer)
-                shell = torch.nn.Module()
-                shell.blocks = torch.nn.ModuleList([block])
-                _initialize(shell, config, hooks)
+                model_lib.initialize_parameters(block, config)
                 block.train()
                 x = torch.randn(rows, length, config.width, requires_grad=True)
-                per_block.append(_count(lambda: block(x, cos_sin).float().square().mean().backward()) / tokens)
-                del block, shell
-            head = torch.nn.Linear(config.width, config.vocab_size, bias=False)
+                per_block.append(_count(lambda: block(x, cos_sin, masks).float().square().mean().backward()) / tokens)
+                del block
+            ends = torch.nn.ModuleDict(dict(embed_gated=model_lib.GatedNorm(config.width, config.gated_norm_rank),
+                                            final_gated=model_lib.GatedNorm(config.width, config.gated_norm_rank),
+                                            head=torch.nn.Linear(config.width, config.vocab_size, bias=False)))
+            model_lib.initialize_parameters(ends, config)
             h = torch.randn(tokens, config.width, requires_grad=True)
-            head_flops = _count(lambda: head(h).square().mean().backward()) / tokens
-            matmul = (sum(per_block) + head_flops) * tokens
+            outer = _count(lambda: ends.head(ends.final_gated(ends.embed_gated(h))).square().mean().backward()) / tokens
+            matmul = (sum(per_block) + outer) * tokens
     matmul_per_token = matmul / tokens
     attention = attention_flops(config)
     return dict(matmul_per_token=matmul_per_token, attention_per_token=attention,
                 flops_per_token=matmul_per_token + attention, per_block=per_block, tokens_measured=tokens)
-
-
-@torch.no_grad()
-def _initialize(shell, config, hooks):
-    std = config.init_scale / math.sqrt(config.width)
-    for name, p in shell.named_parameters():
-        torch.nn.init.ones_(p) if p.ndim == 1 else torch.nn.init.normal_(p, std=std)
 
 
 def source_digest(method):
@@ -216,7 +215,11 @@ def report():
         config = model_lib.MoEConfig.baseline(name)
         a = analytic(config)
         counts = parameters(config)
-        marin_forward = (2 * counts["active_non_embedding"]
+        # Marin's budget formula: 2 x (attention, router, active and shared experts) + non-causal attention,
+        # without the head, the GatedNorms, the head-wise gates and the gains.
+        d, r = config.width, config.gated_norm_rank
+        gates = (2 * config.layers + 2) * 2 * d * r + config.layers * d * config.heads + (2 * config.layers + 2) * d
+        marin_forward = (2 * (counts["active_non_embedding"] - gates)
                          + 4 * config.sequence_len * config.heads * config.head_dim * config.layers)
         rows[name] = dict(
             marin_run=tr.marin_run, shape=dict(width=tr.width, layers=tr.layers, heads=tr.heads, kv_heads=tr.kv_heads,

@@ -1,1 +1,1 @@
-"""MoE-track evaluation: validation BPB, CORE-22, the long-context suite LC-5 and the MoE-CORE aggregate."""
+"""MoE-track evaluation: validation BPB and MoE-CORE (10 short tasks, RULER S-NIAH-1, FDA, SWDE)."""

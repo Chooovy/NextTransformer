@@ -50,7 +50,7 @@ class Dolma2Tokenizer:
     __call__ = encode
 
     def decode(self, ids):
-        return self.enc.decode(list(ids))
+        return self.enc.decode([i for i in ids if 0 <= i < self.vocab_size])   # padding rows decode to nothing
 
     def token_bytes(self):
         """UTF-8 byte length of every id (special tokens count zero), for bits per byte."""

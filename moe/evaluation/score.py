@@ -1,19 +1,27 @@
-"""MoE-CORE: one centered score over the 22 CORE tasks and the 5 long-context tasks.
+"""MoE-CORE: one score, the mean centered accuracy over 14 entries.
 
-    MoE-CORE = mean over 27 entries of the centered accuracy
-             = (22 * CORE-22 + 5 * LC-5) / 27
+    short (10)  ARC-E, ARC-C, HellaSwag, PIQA, WinoGrande, CSQA, OBQA, LAMBADA, SQuAD, TriviaQA
+    long  (4)   RULER S-NIAH-1 at 2,048 and at 4,096 tokens, FDA, SWDE
 
-Each CORE entry is nanochat's centered accuracy; each LC-5 entry is the task's centered accuracy averaged over
-the scored lengths 2,048 / 3,072 / 4,096. Every entry weighs the same, as in CORE. CORE-22 and LC-5 are always
-published next to MoE-CORE, so the dense leaderboard's CORE stays directly comparable.
+centered = (accuracy - chance) / (1 - chance), as in DCLM's CORE; generative and short-answer tasks have chance 0.
+Every entry weighs the same. The RULER 8,192-token probe is reported but not scored.
 """
-CORE_TASKS = 22
-LC_TASKS = 5
+from moe.evaluation.ruler import SCORED_LENGTHS
+from moe.evaluation.short import TASKS as SHORT
+
+LONG = (*(f"ruler_niah_{n // 1024}k" for n in SCORED_LENGTHS), "fda", "swde")
+ENTRIES = (*SHORT, *LONG)
 
 
-def moe_core(core, lc):
-    if len(core["centered_results"]) != CORE_TASKS or len(lc["centered"]) != LC_TASKS:
-        raise ValueError("MoE-CORE needs all 22 CORE tasks and all 5 long-context tasks")
-    entries = [*core["centered_results"].values(), *lc["centered"].values()]
-    return dict(moe_core=sum(entries) / len(entries), core22=core["core_metric"], lc5=lc["lc_metric"],
-                entries=len(entries))
+def moe_core(short, ruler, recall):
+    if any(str(n) not in ruler for n in SCORED_LENGTHS) or set(recall) != {"fda", "swde"}:
+        raise ValueError("MoE-CORE needs every short and long entry")
+    centered = dict(short["centered"])
+    centered.update({f"ruler_niah_{n // 1024}k": ruler[str(n)] for n in SCORED_LENGTHS})
+    centered.update({k: recall[k] for k in ("fda", "swde")})
+    if tuple(centered) != ENTRIES:
+        raise ValueError("MoE-CORE needs every short and long entry")
+    long = [centered[k] for k in LONG]
+    return dict(moe_core=sum(centered.values()) / len(centered), short=sum(short["centered"].values()) / len(SHORT),
+                long=sum(long) / len(long), centered=centered,
+                ruler_probe={k: v for k, v in ruler.items() if int(k) not in SCORED_LENGTHS})

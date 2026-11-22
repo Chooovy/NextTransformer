@@ -6,8 +6,8 @@
     python -m moe.audit --check                                         # validates every published record
 
 The audit re-reads what the trainer wrote and checks it against the protocol: formal mode in every segment,
-unchanged protocol/track/model fingerprints, every validation event, every CORE-22 + LC-5 event with the full
-task sets, the final validation and long-document BPB, the ledger (all updates, all tokens, charged FLOPs within
+unchanged protocol/track/model fingerprints, every validation event, every MoE-CORE event with all 14 entries,
+the final full validation BPB and MoE-CORE, the ledger (all updates, all tokens, charged FLOPs within
 2% of the track anchor) and a throughput measurement. It never records host names, paths or devices.
 """
 import argparse
@@ -16,7 +16,10 @@ from pathlib import Path
 import sys
 
 from moe import compute
-from moe.evaluation.score import CORE_TASKS, LC_TASKS
+from moe.evaluation.recall import DATASETS as RECALL
+from moe.evaluation.ruler import SCORED_LENGTHS
+from moe.evaluation.score import ENTRIES
+from moe.evaluation.short import TASKS as SHORT
 from moe.spec import PROTOCOL, TRACKS
 
 HERE = Path(__file__).resolve().parent
@@ -29,7 +32,7 @@ def events(run_dir):
     out = {}
     for line in (Path(run_dir) / "metrics.jsonl").read_text().splitlines():
         e = json.loads(line)
-        out[(e["event"], e["step"])] = e
+        out[(e["event"], e.get("step"))] = e
     return out
 
 
@@ -37,6 +40,19 @@ def segments(run_dir):
     """run.json of every segment (the trainer keeps the latest; resumed segments archive earlier ones)."""
     paths = sorted(Path(run_dir).glob("run*.json"))
     return [json.loads(p.read_text()) for p in paths]
+
+
+def complete(e):
+    """Problems of one MoE-CORE event: every short task in full, every long task on all its examples."""
+    problems = []
+    short, ruler, recall, score = (e.get(k, {}) for k in ("short", "ruler", "recall", "score"))
+    if not short.get("full") or set(short.get("centered", {})) != set(SHORT):
+        problems.append("the short tasks are not complete")
+    if any(str(n) not in ruler for n in SCORED_LENGTHS) or set(recall) != set(RECALL):
+        problems.append("the long tasks are not complete")
+    if tuple(score.get("centered", {})) != ENTRIES:
+        problems.append("MoE-CORE was not computed on all 14 entries")
+    return problems
 
 
 def audit(run_dir):
@@ -65,18 +81,14 @@ def audit(run_dir):
     for step in track.core_steps:
         e = ev.get(("eval", step))
         if e is None:
-            problems.append(f"missing CORE-22/LC-5 event at step {step}")
+            problems.append(f"missing MoE-CORE event at step {step}")
             continue
-        core, lc = e.get("core", {}), e.get("lc", {})
-        if not core.get("full_core") or len(core.get("centered_results", {})) != CORE_TASKS:
-            problems.append(f"step {step}: CORE-22 is not complete")
-        if len(lc.get("centered", {})) != LC_TASKS or lc.get("examples") != 100:
-            problems.append(f"step {step}: LC-5 is not complete")
-        if "score" not in e:
-            problems.append(f"step {step}: MoE-CORE was not computed")
+        problems += [f"step {step}: {p}" for p in complete(e)]
     final = ev.get(("final", track.updates))
-    if final is None or "long_document_bpb" not in final:
-        problems.append("missing final evaluation (full validation BPB, long-document BPB)")
+    if final is None:
+        problems.append("missing final evaluation (full validation BPB and MoE-CORE)")
+    else:
+        problems += [f"final: {p}" for p in complete(final)]
     ledger = json.loads((run_dir / "ledger.json").read_text()) if (run_dir / "ledger.json").exists() else {}
     if ledger.get("updates") != track.updates or ledger.get("input_tokens") != track.total_tokens:
         problems.append("ledger does not cover the full token budget")
@@ -111,9 +123,9 @@ def export(run_dir, name, throughput_file=None, note=None):
     evals = []
     for step in track.core_steps:
         e = ev[("eval", step)]
-        evals.append(dict(step=step, moe_core=e["score"]["moe_core"], core22=e["core"]["core_metric"],
-                          lc5=e["lc"]["lc_metric"], core_centered=e["core"]["centered_results"],
-                          lc_centered=e["lc"]["centered"], lc_accuracy=e["lc"]["accuracy"]))
+        evals.append(dict(step=step, moe_core=e["score"]["moe_core"], short=e["score"]["short"],
+                          long=e["score"]["long"], centered=e["score"]["centered"],
+                          ruler_probe=e["score"]["ruler_probe"]))
     final = ev[("final", track.updates)]
     own = [e for (kind, _), e in ev.items() if kind == "throughput"][-1]
     record = dict(protocol=PROTOCOL.version, protocol_hash=PROTOCOL.fingerprint, track=track.name,
@@ -122,8 +134,8 @@ def export(run_dir, name, throughput_file=None, note=None):
                   training_flops=run["flops_per_token"] * track.total_tokens, tokens=track.total_tokens,
                   validation=val, evaluations=evals, final=dict(
                       val_macro_bpb=final["val"]["macro_bpb"], val_sources=final["val"]["sources"],
-                      moe_core=final.get("score", {}).get("moe_core", evals[-1]["moe_core"]),
-                      long_document_bpb=final["long_document_bpb"]),
+                      moe_core=final["score"]["moe_core"], short=final["score"]["short"],
+                      long=final["score"]["long"], centered=final["score"]["centered"]),
                   throughput=dict(training=dict(tokens_per_second=own["tokens_per_second"],
                                                 tokens_per_second_per_device=own["tokens_per_second_per_device"],
                                                 mfu=own.get("mfu"))),
