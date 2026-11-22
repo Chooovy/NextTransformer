@@ -196,6 +196,7 @@ accelerate launch --config_file launch/accelerate.yaml \
 
 - **2026 年 11 月 14 日前：** Arena v2 和 agent 原生研究。
 - **2K Scaling**：先做 [T3 尺寸扫描](https://interactive-active-ai.github.io/NextTransformer/#scaling)，再完善拟合、校验预测，最终在 C200 盲测。
+- **MoE 赛道**：两个复现 Marin 的 MoE 尺寸（d768、d1024），token 和 FLOPs 预算固定，完整复现 Marin 的 Grug MoE recipe，用 MoE-CORE（10 个短任务加 RULER、FDA、SWDE 等最长 4K 的长上下文任务）和统一吞吐标准评测。见 [`moe/`](moe/README.zh-CN.md)；下一步是 baseline 的正式训练。
 - **Hybrid GDN + QSA：** 正式结果、累计审计与[运行说明](https://interactive-active-ai.github.io/NextTransformer/docs/zh-cn/results/runs/qsa_hybrid/)已发布。
 - **计划中：** 在 Hugging Face Hub 上发布检查点和分词器。
 
