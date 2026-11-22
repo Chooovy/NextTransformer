@@ -7,17 +7,17 @@
         "tokens_per_update": 262144,
         "updates": 16875,
         "total_tokens": 4423680000,
-        "flops_per_token": 915429888.0,
-        "training_flops": 4.04956888694784e+18,
+        "flops_per_token": 936884736.0,
+        "training_flops": 4.14447826894848e+18,
         "parameters": {
-          "total": 1992831744,
-          "active": 209203968,
+          "total": 1996408320,
+          "active": 212780544,
           "embedding": 77070336,
           "head": 77070336,
-          "active_non_embedding": 55063296,
-          "total_non_embedding": 1838691072
+          "active_non_embedding": 58639872,
+          "total_non_embedding": 1842267648
         },
-        "tokens_per_active_parameter": 21.15
+        "tokens_per_active_parameter": 20.79
       },
       "marin": {
         "run": "moe_may_compute_opt_d768_ep1",
@@ -25,7 +25,7 @@
         "source": "https://github.com/marin-community/marin/blob/cd0e932c780e0171c5612658faa0f180a851569e/experiments/grug/moe/README.md",
         "issue": "https://github.com/marin-community/marin/issues/6074",
         "budget_flops": 2.81e+18,
-        "budget_in_marin_convention_here": 2797401035243520000,
+        "budget_in_marin_convention_here": 2797054501847040000,
         "active_non_embedding_parameters": 58600000.0,
         "paloma_macro_loss": 3.2273,
         "tokens_per_second": 294726,
@@ -59,17 +59,17 @@
         "tokens_per_update": 524288,
         "updates": 16080,
         "total_tokens": 8430551040,
-        "flops_per_token": 1656268800.0,
-        "training_flops": 1.3963258654359552e+19,
+        "flops_per_token": 1694558208.0,
+        "training_flops": 1.4286059462794936e+19,
         "parameters": {
-          "total": 4701051904,
-          "active": 341072896,
+          "total": 4707434496,
+          "active": 347455488,
           "embedding": 102760448,
           "head": 102760448,
-          "active_non_embedding": 135552000,
-          "total_non_embedding": 4495531008
+          "active_non_embedding": 141934592,
+          "total_non_embedding": 4501913600
         },
-        "tokens_per_active_parameter": 24.72
+        "tokens_per_active_parameter": 24.26
       },
       "marin": {
         "run": "moe_may_compute_opt_d1024_ep1",
@@ -77,7 +77,7 @@
         "source": "https://github.com/marin-community/marin/blob/cd0e932c780e0171c5612658faa0f180a851569e/experiments/grug/moe/README.md",
         "issue": "https://github.com/marin-community/marin/issues/6074",
         "budget_flops": 1.16e+19,
-        "budget_in_marin_convention_here": 11524227128748933120,
+        "budget_in_marin_convention_here": 11523035790720368640,
         "active_non_embedding_parameters": 142000000.0,
         "paloma_macro_loss": 3.0195,
         "tokens_per_second": 219720,

@@ -259,6 +259,22 @@ def test_track_budgets(track, flops, marin):
     assert row["marin_convention_budget"] == pytest.approx(marin, rel=0.01)
 
 
+@pytest.mark.parametrize("track", ["d768", "d1024"])
+def test_reference_numbers_follow_the_ledger(track):
+    """moe/references.json is read by people, not by code, so nothing else catches it going stale."""
+    from moe.train import PEAK_BF16_FLOPS
+    row, reference = compute.report()[track], json.loads((ROOT / "moe" / "references.json").read_text())
+    planned, measured = reference["tracks"][track]["protocol"], reference["tracks"][track]["throughput_measured"]
+    stale = "moe/references.json is stale: rebuild it from python -m moe.compute report"
+    assert planned["flops_per_token"] == row["flops_per_token"], stale
+    assert planned["training_flops"] == row["training_flops"], stale
+    assert planned["parameters"] == row["parameters"], stale
+    assert reference["tracks"][track]["marin"]["budget_in_marin_convention_here"] == row["marin_convention_budget"], stale
+    # The published MFU is the same anchor divided by the measured throughput, so it dates the measurement.
+    mfu = row["flops_per_token"] * measured["tokens_per_second"] / (measured["devices"] * PEAK_BF16_FLOPS)
+    assert measured["mfu"] == pytest.approx(mfu, abs=5e-4), "the throughput was measured against a different model"
+
+
 # --- plugins --------------------------------------------------------------------------------------------------
 
 def test_plugins_are_discovered_and_built(test_plugins):
