@@ -1,6 +1,6 @@
 ---
 title: MoE protocol
-description: The fixed contract of the two MoE tracks (d768, d1024): Marin recipe, budgets, compute, throughput and MoE-CORE.
+description: The fixed contract of the two MoE tracks, d768 and d1024, covering the Marin recipe, budgets, compute, throughput and MoE-CORE.
 ---
 
 The MoE track asks the NextTransformer question for sparse models: **when the training budget is fixed, how should
