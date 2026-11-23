@@ -44,7 +44,7 @@ def configuration(method, track_name):
 
 
 def measure(method, track_name, resources, micro_batch, rank, world, device, *, warmup=WARMUP, steps=MEASURED,
-            debug=False):
+            debug=False, offload_activations=False):
     config, admitted = configuration(method, track_name)
     if debug:
         config = config.debug()
@@ -63,7 +63,7 @@ def measure(method, track_name, resources, micro_batch, rank, world, device, *, 
     for step in range(warmup + steps):
         started = time.perf_counter()
         update(model, opt, rows, step, schedule(step, track), rank, world, rows_per_update, micro_batch,
-               accumulation, device)
+               accumulation, device, offload_activations=offload_activations)
         if step >= warmup:
             times.append(time.perf_counter() - started)
     trim = len(times) // 10
@@ -80,7 +80,8 @@ def measure(method, track_name, resources, micro_batch, rank, world, device, *, 
                   tokens_per_second_per_device=tokens / seconds / world, flops_per_token=flops,
                   mfu=flops * tokens / seconds / (world * PEAK_BF16_FLOPS) if device.type == "cuda" else None,
                   peak_memory_gib=torch.cuda.max_memory_allocated() / 2**30 if device.type == "cuda" else None,
-                  micro_batch=micro_batch, world_size=world, warmup=warmup, measured=steps)
+                  micro_batch=micro_batch, world_size=world, warmup=warmup, measured=steps,
+                  offload_activations=offload_activations)
     del model, opt
     gc.collect()
     if device.type == "cuda":
@@ -101,6 +102,7 @@ def main(argv=None):
     p.add_argument("--methods", default="baseline", help="comma-separated; the baseline is always measured first")
     p.add_argument("--resources", type=Path, required=True)
     p.add_argument("--micro-batch", type=int, default=8)
+    p.add_argument("--offload-activations", action="store_true", help="hold large saved activations in host memory")
     p.add_argument("--warmup", type=int, default=WARMUP)
     p.add_argument("--steps", type=int, default=MEASURED)
     p.add_argument("--debug", action="store_true")
@@ -109,7 +111,8 @@ def main(argv=None):
     methods = ["baseline", *[m for m in args.methods.split(",") if m and m != "baseline"]]
     rank, world, device = initialize()
     results = [measure(m, args.track, args.resources, args.micro_batch, rank, world, device,
-                       warmup=args.warmup, steps=args.steps, debug=args.debug) for m in methods]
+                       warmup=args.warmup, steps=args.steps, debug=args.debug,
+                       offload_activations=args.offload_activations) for m in methods]
     base = results[0]["tokens_per_second"]
     for r in results:
         r["relative_throughput"] = r["tokens_per_second"] / base

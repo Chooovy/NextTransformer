@@ -16,6 +16,7 @@ from pathlib import Path
 import sys
 
 from moe import compute
+from moe.budgets import run_protocol
 from moe.evaluation.recall import DATASETS as RECALL
 from moe.evaluation.ruler import SCORED_LENGTHS
 from moe.evaluation.score import ENTRIES
@@ -65,10 +66,11 @@ def audit(run_dir):
     track = TRACKS.get(run.get("track"))
     if track is None:
         return [f"unknown track {run.get('track')}"], {}
+    protocol = run_protocol(track.name, run.get("protocol_hash"))
     for s in segs:
         if not s.get("formal"):
             problems.append("a training segment ran in research mode")
-        if s.get("protocol_hash") != PROTOCOL.fingerprint:
+        if s.get("protocol_hash") != protocol.fingerprint:
             problems.append("protocol fingerprint differs from the current protocol")
         if s.get("track_hash") != track.fingerprint:
             problems.append("track fingerprint differs")
@@ -104,7 +106,7 @@ def audit(run_dir):
     if not throughput:
         problems.append("no throughput event")
     summary = dict(method=run.get("method"), track=track.name, model_hash=run.get("model_hash"),
-                   protocol_hash=PROTOCOL.fingerprint, track_hash=track.fingerprint,
+                   protocol_hash=protocol.fingerprint, track_hash=track.fingerprint,
                    data_manifest_sha256=run.get("data_manifest_sha256"), segments=len(segs),
                    world_sizes=sorted({s.get("world_size") for s in segs}), cumulative_gap=gap,
                    updates=ledger.get("updates"), input_tokens=ledger.get("input_tokens"),
@@ -118,6 +120,7 @@ def export(run_dir, name, throughput_file=None, note=None):
         raise ValueError("the audit failed:\n" + "\n".join(problems))
     run = segments(run_dir)[-1]
     track = TRACKS[run["track"]]
+    protocol = run_protocol(track.name, run["protocol_hash"])
     ev = events(run_dir)
     val = [[step, (ev.get(("eval", step)) or ev[("val", step)])["val"]["macro_bpb"]] for step in track.validation_steps]
     evals = []
@@ -128,7 +131,7 @@ def export(run_dir, name, throughput_file=None, note=None):
                           ruler_probe=e["score"]["ruler_probe"]))
     final = ev[("final", track.updates)]
     own = [e for (kind, _), e in ev.items() if kind == "throughput"][-1]
-    record = dict(protocol=PROTOCOL.version, protocol_hash=PROTOCOL.fingerprint, track=track.name,
+    record = dict(protocol=protocol.version, protocol_hash=protocol.fingerprint, track=track.name,
                   method=run["method"], name=name, model=run["model"], model_hash=run["model_hash"],
                   parameters=run["parameters"], flops_per_token=run["flops_per_token"],
                   training_flops=run["flops_per_token"] * track.total_tokens, tokens=track.total_tokens,
@@ -138,7 +141,7 @@ def export(run_dir, name, throughput_file=None, note=None):
                       long=final["score"]["long"], centered=final["score"]["centered"]),
                   throughput=dict(training=dict(tokens_per_second=own["tokens_per_second"],
                                                 tokens_per_second_per_device=own["tokens_per_second_per_device"],
-                                                mfu=own.get("mfu"))),
+                                                mfu=own.get("mfu"), offload_activations=run.get("offload_activations", False))),
                   audit=f"moe/evidence/audits/{track.name}/{run['method']}.json", note=note)
     if throughput_file:
         harness = json.loads(Path(throughput_file).read_text())
@@ -146,6 +149,7 @@ def export(run_dir, name, throughput_file=None, note=None):
         record["throughput"]["harness"] = {k: mine[k] for k in (
             "tokens_per_second", "tokens_per_second_per_device", "mfu", "relative_throughput", "peak_memory_gib",
             "world_size", "micro_batch")}
+        record["throughput"]["harness"]["offload_activations"] = mine.get("offload_activations", False)
     path = RESULTS / track.name / f"{run['method']}.json"
     path.parent.mkdir(parents=True, exist_ok=True)
     path.write_text(json.dumps(record, indent=2) + "\n")
@@ -157,7 +161,7 @@ def check():
     for path in sorted(RESULTS.glob("*/*.json")):
         r = json.loads(path.read_text())
         where = str(path.relative_to(HERE.parent))
-        if r.get("protocol_hash") != PROTOCOL.fingerprint:
+        if r.get("protocol_hash") != run_protocol(r.get("track"), r.get("protocol_hash")).fingerprint:
             problems.append(f"{where}: protocol fingerprint differs")
         if r.get("track") != path.parent.name or r.get("method") != path.stem:
             problems.append(f"{where}: file name disagrees with track/method")

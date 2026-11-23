@@ -6,13 +6,17 @@ description: A compute-controlled comparison platform for Mixture-of-Experts lan
 The MoE track applies the NextTransformer contract to sparse models. Every method uses the same data, in the same
 order, at the same training FLOPs per token, with the same evaluation. Parameters and speed are outcomes.
 
-There are two fixed tracks. Each reproduces one of Marin's compute-optimal Grug MoE cells: model, MuonH optimizer,
+The two reference tracks reproduce Marin's compute-optimal Grug MoE cells: model, MuonH optimizer,
 schedule, quantile-balanced routing, context, batch and updates.
 
 | Track | Shape | Context | Tokens | FLOPs / token | Total / active params |
 |---|---|---|---|---|---|
 | **d768** | 8 × 768, GQA 6/1, 256 experts × 384 top-4 + shared 768 | 4,096 | 4.42B | 9.369 × 10⁸ | 2.00B / 213M |
 | **d1024** | 11 × 1024, GQA 8/2, 256 experts × 512 top-4 + shared 1024 | 4,096 | 8.43B | 1.695 × 10⁹ | 4.71B / 347M |
+
+The [240 TPP comparison](../protocol/#240-tpp-comparison) runs these backbones for longer. The d768
+track admits baseline, HC, mHC and SimpleHC at 14,073,462,784 input tokens. The d1024 track admits the
+baseline at 34,064,564,224 input tokens. Both use the same global batch as their May reference track.
 
 - **Data.** Dolma 3 HQ (300B tokens, shuffled and cleaned), tokenized with the dolma2 tokenizer. Shards are read in a
   fixed order.

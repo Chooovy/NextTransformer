@@ -34,6 +34,7 @@ import torch.distributed as dist
 from moe import compute
 from moe.data import Rows, directory, micro_batches, verify
 from moe.model import build_model, eager_attention
+from moe.offload import activation_storage
 from moe.spec import PROTOCOL, REPO, learning_rate, load_config, schedule, track as get_track
 
 CHECKPOINT_EVERY = 1000
@@ -195,6 +196,7 @@ def main(argv=None):
     p.add_argument("--resources", type=Path, required=True)
     p.add_argument("--output", type=Path, required=True)
     p.add_argument("--micro-batch", type=int, default=8)
+    p.add_argument("--offload-activations", action="store_true", help="hold large saved activations in host memory")
     p.add_argument("--formal", action="store_true")
     p.add_argument("--resume", type=Path, help="a checkpoint_<step> directory of this run")
     p.add_argument("--smoke-steps", type=int, help="research: stop after this many updates")
@@ -241,7 +243,8 @@ def main(argv=None):
         protocol=PROTOCOL.version, protocol_hash=PROTOCOL.fingerprint, track=track.name, track_hash=track.fingerprint,
         method=config.method, model=config.serialized(), model_hash=config.fingerprint, calibration=calibration,
         formal=args.formal, data_manifest_sha256=manifest_digest, world_size=world, micro_batch=args.micro_batch,
-        accumulation=accumulation, torch=torch.__version__, commit=git_commit(), resumed_from=start or None,
+        accumulation=accumulation, offload_activations=args.offload_activations,
+        torch=torch.__version__, commit=git_commit(), resumed_from=start or None,
         flops_per_token=flops_per_token, parameters=build_model(config, "meta").parameter_counts()))
     if start == 0:
         run.event("start", step=0)
@@ -268,7 +271,7 @@ def main(argv=None):
         started = time.perf_counter()
         lr = learning_rate(step, track)
         total, norm = update(model, opt, rows, step, schedule(step, track), rank, world, rows_per_update, args.micro_batch,
-                             accumulation, device)
+                             accumulation, device, offload_activations=args.offload_activations)
         elapsed = time.perf_counter() - started
         if step >= start + 5:   # skip warm-up updates (allocation, autotuning)
             window.append(elapsed)
@@ -303,7 +306,8 @@ def main(argv=None):
         dist.destroy_process_group()
 
 
-def update(model, opt, rows, step, multiplier, rank, world, rows_per_update, micro_batch, accumulation, device):
+def update(model, opt, rows, step, multiplier, rank, world, rows_per_update, micro_batch, accumulation, device,
+           *, offload_activations=False):
     """One optimizer update of the shared recipe; returns (mean loss over the update, gradient norm).
 
     `multiplier` is the schedule value for this step (each optimizer group scales its own peak rate)."""
@@ -312,7 +316,7 @@ def update(model, opt, rows, step, multiplier, rank, world, rows_per_update, mic
     for i, (x, y) in enumerate(micro_batches(rows, step, rank, world, rows_per_update, micro_batch, device)):
         if hasattr(model, "set_requires_gradient_sync"):
             model.set_requires_gradient_sync(i == accumulation - 1)
-        with autocast(device):
+        with autocast(device), activation_storage(offload_activations):
             loss = model(x, y)
             aux = getattr(model, "last_aux", None)
             objective = (loss + (aux if aux is not None else 0)) / accumulation

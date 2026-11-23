@@ -94,7 +94,7 @@ def _write_stream(paths, out, limit, workers):
     return written
 
 
-def prepare(root, track_names=tuple(TRACKS), workers=None, limit_tokens=None):
+def prepare(root, track_names=PROTOCOL.tracks, workers=None, limit_tokens=None):
     """limit_tokens (research only) stops the training and development streams early; the manifest says so."""
     out = directory(root)
     (out / "val").mkdir(parents=True, exist_ok=True)
@@ -228,7 +228,7 @@ def main(argv=None):
     v.add_argument("--track", choices=tuple(TRACKS))
     args = p.parse_args(argv)
     if args.command == "prepare":
-        manifest = prepare(args.root, tuple(args.track or TRACKS), args.workers, args.limit_tokens)
+        manifest = prepare(args.root, tuple(args.track or PROTOCOL.tracks), args.workers, args.limit_tokens)
         print(json.dumps({k: manifest[k] for k in ("train_tokens", "dev_tokens", "validation_tokens")}, indent=2))
     else:
         print(verify(args.root, args.track))

@@ -1,7 +1,9 @@
-"""NextTransformer-MoE: a compute-controlled comparison track for Mixture-of-Experts language models.
+"""Compute-controlled MoE comparisons on Marin's May backbones.
 
-Two fixed tracks reproduce the shapes and budgets of Marin's compute-optimal Grug MoE cells (d768 and
-d1024). Every method trains on the same tokens in the same order, at the same theoretical training FLOPs per
-token as the track's reference baseline, and is scored by the same throughput harness and MoE-CORE suite.
-The normative text is moe/PROTOCOL.md; the machine-readable values live in moe/spec.py.
+The original tracks and shared controls are frozen in moe.spec. Additional budgets
+are registered by name and carry their own track fingerprints.
 """
+from moe.budgets import tpp240_tracks
+from moe.spec import TRACKS
+
+TRACKS.update(tpp240_tracks(TRACKS))

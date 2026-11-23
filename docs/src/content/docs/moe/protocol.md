@@ -1,6 +1,6 @@
 ---
 title: MoE protocol
-description: The fixed contract of the two MoE tracks, d768 and d1024, covering the Marin recipe, budgets, compute, throughput and MoE-CORE.
+description: The d768 and d1024 May and 240 TPP budgets, covering the Marin recipe, budgets, compute, throughput and MoE-CORE.
 ---
 
 The MoE track asks the NextTransformer question for sparse models: **when the training budget is fixed, how should
@@ -58,6 +58,41 @@ context, batch and number of updates. Sources:
 Marin's budget formula covers the attention, router and expert matrices plus non-causal attention. It leaves out the
 head, the GatedNorms and the gates. With that formula the two shapes land within 0.7% of Marin's published budgets.
 This protocol counts every matmul and the exact attention edges, so its anchor is larger.
+
+## 240 TPP comparison
+
+NextTransformer also defines a longer budget for each May backbone. TPP here is the number of input tokens per
+**active baseline parameter excluding both the token embedding and the output head**. Each method at a given
+width uses the same reference parameter count and the same prefix of the training stream.
+
+| Quantity | `d768-240tpp` | `d1024-240tpp` |
+|---|---:|---:|
+| Active baseline parameters for TPP | 58,639,872 | 141,934,592 |
+| Rows × sequence length | 64 × 4,096 | 128 × 4,096 |
+| Input tokens per update | 262,144 | 524,288 |
+| Updates / warmup steps | 53,686 / 536 | 64,973 / 649 |
+| **Training input tokens** | **14,073,462,784** | **34,064,564,224** |
+| Peak LR, MuonH and AdamH / Adam | 0.005300844 / 0.001223272 | 0.005063817 / 0.001168573 |
+| MoE-CORE steps | 12,726 / 25,451 / 38,177 / 53,686 | 16,162 / 32,325 / 48,487 / 64,973 |
+| Eight-device layout, micro-batch × accumulation per device | 8 × 1 | 8 × 2 |
+| Admitted methods | baseline, HC, mHC, SimpleHC | baseline |
+
+Round `240 × active baseline parameters / tokens per update` to the nearest whole update, with halves rounded up.
+The d1024 target is exactly 64,972.5 updates. CORE events retain their fractions of the original track and
+validation runs at step zero, every 500 updates and the final step. The schedule derives peak rates, warmup
+and Adam epsilon from the new budget. Both tracks use the shared data order, seed, quantile-balancing groups
+and FLOPs admission windows of this protocol.
+
+For the d1024 baseline on eight 80 GiB A800s, `--offload-activations` stores large BF16 and FP32 tensors
+in pinned host memory during training. It preserves saved values, tensor layouts and the optimizer update.
+Record this setting when comparing throughput.
+
+NextTransformer defines these budgets on the May backbones. Marin's MuonH learning-rate sweep lists
+240 TPP at widths 768 and 1024, with global batches of 64 and 128 rows respectively.
+[Marin issue #5951](https://github.com/marin-community/marin/issues/5951)
+
+The Marin reference measurements above belong to the original cells. In `moe.compute report`, divide `total_tokens` by `parameters.active_non_embedding`
+to recover this TPP convention. The separate `tokens_per_active_parameter` field includes the embedding and head.
 
 ## Reference baseline: Marin's Grug MoE (`method = "baseline"`)
 
