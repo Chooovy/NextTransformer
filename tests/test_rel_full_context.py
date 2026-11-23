@@ -8,6 +8,8 @@ import torch
 from nexttransformer.methods.inkling_rel import RelativeSelfAttention
 from nexttransformer.models.backbone import norm
 from nexttransformer.models.config import debug_config
+from nexttransformer.models import build_model
+from nexttransformer.evaluation.core import inference_view
 
 PATH = Path(__file__).resolve().parents[1] / "evidence/evaluations/xsa-rel-full-context-20261123/rel_full_context.py"
 spec = importlib.util.spec_from_file_location("rel_full_context", PATH)
@@ -54,3 +56,21 @@ def test_extended_path_rejects_training():
     attn = adapter.FullContextRelativeAttention(config, 0)
     with pytest.raises(ValueError, match="evaluation-only"):
         attn(torch.randn(1, attn.rel_extent + 1, config.width), None, None, (-1, 0), None)
+
+
+@torch.no_grad()
+def test_full_model_view_preserves_short_logits_and_configuration():
+    config = debug_config("inkling_rel", width=32, sequence_len=32)
+    model = build_model(config).eval()
+    short = torch.randint(config.vocab_size, (1, config.sequence_len))
+    expected = model(short)
+    state = {k: v.clone() for k, v in model.state_dict().items()}
+    adapter.enable_full_context(model)
+    view = inference_view(model, None)
+    torch.testing.assert_close(view(short), expected, atol=0, rtol=0)
+    long = torch.randint(config.vocab_size, (1, config.option("rel_extent") + 1))
+    logits = view(long)
+    assert logits.shape == (*long.shape, config.vocab_size) and torch.isfinite(logits).all()
+    assert model.config is config and model.config.sequence_len == 32
+    for name, value in model.state_dict().items():
+        torch.testing.assert_close(value, state[name], atol=0, rtol=0)
